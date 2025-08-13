@@ -13,13 +13,20 @@ const QRGenerator = () => {
   const [showQR, setShowQR] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Cambia esta URL a la ruta REAL de tu formulario público en la aplicación web
-  // Por ejemplo, si tu dominio es `https://misistema.com` y el formulario está en `/formulario-de-reportes`
-  const FORM_PUBLIC_PATH = '/reporte'; // <-- ¡AJUSTA ESTA RUTA SI TU FORMULARIO ESTÁ EN OTRA URL RELATIVA!
+  // Ruta al login de la aplicación
+  const FORM_PUBLIC_PATH = '/login';
   const getFormFullUrl = useCallback(() => {
-    // Esto construirá la URL completa. En producción, `window.location.origin` será tu dominio (ej. https://app.com).
-    // En desarrollo, será `http://localhost:port`.
-    return window.location.origin + FORM_PUBLIC_PATH;
+    // Esto construirá la URL completa. En producción, usaremos la URL de Vercel directamente
+    // para asegurar que funcione correctamente al escanear desde un teléfono.
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    if (isProduction) {
+      // URL de producción en Vercel
+      return 'https://sistema-reportes-montemorelos.vercel.app' + FORM_PUBLIC_PATH;
+    } else {
+      // En desarrollo, usar la URL local
+      return window.location.origin + FORM_PUBLIC_PATH;
+    }
   }, [FORM_PUBLIC_PATH]);
 
   // Ruta al logo pequeño para incrustar en el centro del QR (asegúrate de que esta imagen exista)
