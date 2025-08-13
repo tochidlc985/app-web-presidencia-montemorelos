@@ -38,6 +38,38 @@ npm run dev
 npm run test-db
 ```
 
+## 🌐 Despliegue en Vercel
+
+Este proyecto está configurado para desplegarse en Vercel con las siguientes características:
+
+### Backend Serverless
+
+El backend está configurado como funciones serverless en la carpeta `api/`. Esto permite que Vercel ejecute las rutas de la API bajo demanda sin necesidad de un servidor dedicado.
+
+### Variables de Entorno
+
+Para el correcto funcionamiento en producción, asegúrate de configurar las siguientes variables de entorno en Vercel:
+
+- `MONGO_URI`: URL de conexión a tu base de datos MongoDB Atlas
+- `JWT_SECRET`: Clave secreta para firmar los Tokens de Autenticación (JWT)
+- `FRONTEND_URL`: URL del frontend en producción (para configuración de CORS)
+
+### Pasos para el despliegue
+
+1. Conecta tu repositorio de GitHub a Vercel.
+2. Configura las variables de entorno en la sección "Environment Variables" de tu proyecto en Vercel.
+3. Asegúrate de que el directorio de salida esté configurado como `dist`.
+4. El comando de build debe ser `npm run build`.
+5. Despliega tu proyecto.
+
+### Configuración de CORS
+
+El backend está configurado para aceptar peticiones desde el dominio configurado en la variable de entorno `FRONTEND_URL`. Asegúrate de que esta variable esté configurada correctamente para evitar problemas de CORS.
+
+### Manejo de Archivos
+
+Los archivos subidos se guardan en el directorio `uploads/` y se sirven estáticamente. Ten en cuenta que en Vercel, los archivos subidos no persisten entre despliegues, por lo que se recomienda utilizar un servicio de almacenamiento externo como AWS S3 o Google Cloud Storage para producción.
+
 ## 🔧 Problemas Corregidos
 
 ### 1. Base de datos
