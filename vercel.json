@@ -23,7 +23,6 @@
       "destination": "/index.html"
     }
   ],
-
   "env": {
     "NODE_ENV": "production",
     "MONGO_URI": "mongodb+srv://RobertoCarlos:9sXvNyenlCepWq7n@almacenmultinacional.3zwaw.mongodb.net/?retryWrites=true&w=majority",

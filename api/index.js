@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import { fileURLToPath } from 'url';
 import { db } from '../database.js';
+import { ObjectId } from 'mongodb';
 
 // Configuración para Vercel
 const isVercel = process.env.VERCEL === '1';
