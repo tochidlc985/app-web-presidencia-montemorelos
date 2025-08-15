@@ -31,7 +31,7 @@ const Login: React.FC = () => {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/login`, {
+      const res = await fetch(`${import.meta.env.PROD ? 'https://sistema-reportes-montemorelos.vercel.app/api' : import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000'}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

@@ -23,6 +23,11 @@
       "destination": "/index.html"
     }
   ],
+  "functions": {
+    "api/index.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
   "env": {
     "NODE_ENV": "production",
     "MONGO_URI": "mongodb+srv://RobertoCarlos:9sXvNyenlCepWq7n@almacenmultinacional.3zwaw.mongodb.net/?retryWrites=true&w=majority",

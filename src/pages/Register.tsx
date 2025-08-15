@@ -57,7 +57,7 @@ const Register: React.FC = () => {
     setLoading(true);
     try {
       const payload = { nombre: name, email, password, rol: role }; // 'rol' minúscula
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/register`, {
+      const res = await fetch(`${import.meta.env.PROD ? 'https://sistema-reportes-montemorelos.vercel.app/api' : import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000'}/api/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
