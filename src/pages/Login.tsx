@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { Mail, Lock, LogIn, UserPlus,  Loader2, Info, Aperture, } from 'lucide-react'; // Importa más iconos si los necesitas
 import { motion } from 'framer-motion';
 import ReactDOM from 'react-dom';
+import { API_ENDPOINTS } from '../services/apiConfig';
 
 // Componente para el placeholder de la imagen del logo (en caso de que la imagen no cargue)
 const ImagePlaceholder: React.FC = () => (
@@ -26,12 +27,16 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const API_BASE_URL = import.meta.env.PROD 
+    ? 'https://sistema-reportes-montemorelos.vercel.app/api' 
+    : import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const res = await fetch(`${import.meta.env.PROD ? 'https://sistema-reportes-montemorelos.vercel.app/api' : import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000'}/api/login`, {
+      const res = await fetch(`${API_BASE_URL}${API_ENDPOINTS.LOGIN}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

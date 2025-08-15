@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 // Importa los iconos de Lucide-React
 import { User, Mail, Lock, UserPlus, Loader2, Users, Info, LogIn } from 'lucide-react'; // Añadido 'Info' y 'LogIn'
 import BackgroundMedia from '../components/BackgroundMedia';
+import { API_ENDPOINTS } from '../services/apiConfig';
 
 const Register: React.FC = () => {
   const [name, setName] = useState('');
@@ -57,7 +58,10 @@ const Register: React.FC = () => {
     setLoading(true);
     try {
       const payload = { nombre: name, email, password, rol: role }; // 'rol' minúscula
-      const res = await fetch(`${import.meta.env.PROD ? 'https://sistema-reportes-montemorelos.vercel.app/api' : import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000'}/api/register`, {
+      const API_BASE_URL = import.meta.env.PROD 
+        ? 'https://sistema-reportes-montemorelos.vercel.app/api' 
+        : import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
+      const res = await fetch(`${API_BASE_URL}${API_ENDPOINTS.REGISTER}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -234,7 +238,7 @@ const Register: React.FC = () => {
               >
                 <option value="usuario">Usuario/a</option>
                 <option value="administrador">Administrador</option>
-                <option value="jefe">Jefe de Departamento</option>
+                <option value="jefe_departamento">Jefe de Departamento</option>
                 <option value="tecnico">Técnico</option>
               </select>
             </div>
