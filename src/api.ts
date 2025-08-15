@@ -1,7 +1,8 @@
 import axios from 'axios';
+import { ADJUSTED_API_BASE_URL } from './services/apiConfig';
 
 const api = axios.create({
-  baseURL: import.meta.env.PROD ? 'https://sistema-reportes-montemorelos.vercel.app/api' : import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000',
+  baseURL: ADJUSTED_API_BASE_URL,
 });
 
 api.interceptors.request.use(

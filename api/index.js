@@ -9,6 +9,9 @@ import jwt from 'jsonwebtoken';
 import { fileURLToPath } from 'url';
 import { db } from '../database.js';
 
+// Configuración para Vercel
+const isVercel = process.env.VERCEL === '1';
+
 // Cargar variables de entorno
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,9 +27,16 @@ app.use(cors({
     
     // Permitir el origen de producción y desarrollo
     const allowedOrigins = [
-      process.env.FRONTEND_URL,
-      'https://sistema-reportes-montemorelos.vercel.app'
+      process.env.FRONTEND_URL || 'https://sistema-reportes-montemorelos.vercel.app',
+      'https://sistema-reportes-montemorelos.vercel.app',
+      'http://localhost:5713',
+      'http://127.0.0.1:5713'
     ];
+    
+    // En Vercel, permitir también el dominio vercel.app
+    if (isVercel && origin && origin.includes('.vercel.app')) {
+      return callback(null, true);
+    }
     
     // Si estamos en desarrollo, permitir cualquier origen localhost
     if (process.env.NODE_ENV !== 'production' && origin && origin.includes('localhost:')) {

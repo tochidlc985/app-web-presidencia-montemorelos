@@ -6,7 +6,8 @@ import { motion } from 'framer-motion';
 // Importa los iconos de Lucide-React
 import { User, Mail, Lock, UserPlus, Loader2, Users, Info, LogIn } from 'lucide-react'; // Añadido 'Info' y 'LogIn'
 import BackgroundMedia from '../components/BackgroundMedia';
-import { API_ENDPOINTS } from '../services/apiConfig';
+import { API_BASE_URL, API_ENDPOINTS } from '../services/apiConfig';
+import api from '../api';
 
 const Register: React.FC = () => {
   const [name, setName] = useState('');
@@ -58,37 +59,13 @@ const Register: React.FC = () => {
     setLoading(true);
     try {
       const payload = { nombre: name, email, password, rol: role }; // 'rol' minúscula
-      const API_BASE_URL = import.meta.env.PROD 
-        ? 'https://sistema-reportes-montemorelos.vercel.app/api' 
-        : import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
-      const res = await fetch(`${API_BASE_URL}${API_ENDPOINTS.REGISTER}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      const res = await api.post(API_ENDPOINTS.REGISTER, payload);
 
-      let data;
-      const responseText = await res.text();
-      if (!responseText) {
-        if (res.ok) {
-          data = { message: 'Registro exitoso (respuesta vacía, pero status OK).' };
-        } else {
-          throw new Error(`Error ${res.status}: Respuesta vacía o no válida.`);
-        }
-      } else {
-        try {
-          data = JSON.parse(responseText);
-        } catch (jsonError) {
-          console.error('Error al parsear JSON:', jsonError);
-          console.log('Respuesta cruda del servidor:', responseText);
-          throw new Error('El servidor envió una respuesta no válida o inesperada.');
-        }
+      if (!res.data) {
+        throw new Error('Error al registrar. Por favor, intenta de nuevo.');
       }
 
-      if (!res.ok) {
-        const msg = data?.message || `Error ${res.status}: ${res.statusText || 'al registrarse.'}`;
-        throw new Error(msg);
-      }
+      const data = res.data;
 
       toast.success('Registro exitoso. Redirigiendo para iniciar sesión...');
       setTimeout(() => navigate('/login'), 1500);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { API_ENDPOINTS } from '../services/apiConfig';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Area, AreaChart, Legend, Brush
@@ -167,10 +168,13 @@ const Dashboard: React.FC = () => {
       const token = localStorage.getItem('token');
       const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
 
-      const res = await api.get('/api/reportes', config);
+      const res = await api.get(API_ENDPOINTS.REPORTES, config);
       const data = res.data;
 
-      const adaptados: Reporte[] = (data as any[]).map((r: any) => {
+      // Verificar si data es un array, si no lo es, intentar obtener la propiedad correcta
+      const dataArray = Array.isArray(data) ? data : ((data as any).reportes || (data as any).data || []);
+
+      const adaptados: Reporte[] = (dataArray as any[]).map((r: any) => {
         const assignedTo = r.asignadoA && INTEGRANTES.includes(r.asignadoA) ? r.asignadoA : getRandomAsignadoA();
 
         return {

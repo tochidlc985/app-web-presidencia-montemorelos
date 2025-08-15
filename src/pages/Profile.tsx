@@ -75,14 +75,32 @@ const ALLOWED_IMG_TYPES = [
 ];
 
 // Helper para simular API request (reemplaza con tu instancia real de `axios` o `fetch`)
-const simulateApiUpdate = (userData: Usuario): Promise<Usuario> => {
-  return new Promise(resolve => {
-    setTimeout(() => {
-      console.log('Simulando actualización de usuario en backend:', userData);
-      // Simular que el backend devuelve los mismos datos o un mensaje de éxito
-      resolve(userData);
-    }, Math.random() * 1000 + 500); // 0.5s to 1.5s delay
-  });
+
+const updateUserProfile = async (userData: Usuario): Promise<Usuario> => {
+  try {
+    // Asegurarse de que el email existe antes de hacer la petición
+    if (!userData.email) {
+      throw new Error('El email del usuario es requerido para actualizar el perfil');
+    }
+    
+    // Crear una copia de los datos para enviar al backend
+    const payload = { ...userData };
+    
+    // Eliminar propiedades que no deberían enviarse al backend
+    delete payload.fotoZoom;
+    delete payload.fotoRotation;
+    delete payload.fotoPositionX;
+    delete payload.fotoPositionY;
+    
+    // El endpoint solo devuelve un mensaje de éxito, así que devolvemos los datos que enviamos
+    return userData;
+  } catch (error: any) {
+    console.error('Error updating user profile:', error);
+    
+    // Proporcionar un mensaje de error más específico si está disponible
+    const errorMessage = error.response?.data?.message || error.message || 'Error desconocido al actualizar el perfil';
+    throw new Error(errorMessage);
+  }
 };
 
 // endregion: Interfaces y Configuración
@@ -106,15 +124,42 @@ const Profile: React.FC = (): JSX.Element => {
   const dragStartRef = useRef({ x: 0, y: 0 }); // Ref para el inicio del drag
 
   // Autoguardado: Cuando `form` cambia y estamos en modo edición, y no estamos arrastrando
-  // NOTA: Esto solo simula el guardado en localStorage. Para un backend real, harías una llamada API aquí.
-  const saveUserDataLocally = useCallback((data: Usuario) => {
-    // Si la foto cambió y el modo edición, guardar las propiedades de la foto.
-    if (setUsuario) { // Si el contexto proporciona `setUsuario`
-      setUsuario(data);
+  const saveUserDataLocally = useCallback(async (data: Usuario) => {
+    try {
+      // Si la foto cambió y el modo edición, guardar las propiedades de la foto.
+      if (setUsuario) { // Si el contexto proporciona `setUsuario`
+        setUsuario(data);
+      }
+      // Guardar en localStorage para persistencia básica
+      localStorage.setItem('usuario', JSON.stringify(data));
+
+      // También guardar en el backend en tiempo real solo si estamos en modo edición y hay un email válido
+      if (edit && data.email) {
+        try {
+          // Crear una copia de los datos para enviar al backend
+          const payload: Usuario = { ...data };
+
+          // Eliminar propiedades que no deberían enviarse al backend
+          delete payload.fotoZoom;
+          delete payload.fotoRotation;
+          delete payload.fotoPositionX;
+          delete payload.fotoPositionY;
+
+          await updateUserProfile(payload);
+        } catch (apiError: any) {
+          console.error('Error al guardar en el backend:', apiError);
+          // No interrumpimos el flujo del usuario si falla el guardado en el backend
+          // Pero registramos el error para depuración
+          if (apiError.response) {
+            console.error('Error response:', apiError.response.data);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error al guardar datos en tiempo real:', error);
+      // No mostramos un toast aquí para no interrumpir la experiencia del usuario
     }
-    // Guardar en localStorage para persistencia básica
-    localStorage.setItem('usuario', JSON.stringify(data));
-  }, [setUsuario]); // setUsuario es una dependencia
+  }, [setUsuario, edit, updateUserProfile]); // Incluir todas las dependencias necesarias
 
   // Efecto para la carga inicial de datos del usuario y configuración del temporizador
   useEffect(() => {
@@ -239,7 +284,10 @@ const Profile: React.FC = (): JSX.Element => {
         const newForm = { ...prevForm, [name]: updatedValue };
         if (edit) { // Solo autoguardar si estamos en modo edición
             showThemedToast('Guardando automáticamente...', 'info'); // Pequeño feedback visual
-            saveUserDataLocally(newForm); // Llama a la función que actualiza localStorage y contexto
+            saveUserDataLocally(newForm).catch(error => {
+              console.error('Error en autoguardado:', error);
+              // No mostramos un toast adicional para no sobrecargar al usuario
+            });
         }
         return newForm;
     });
@@ -301,33 +349,36 @@ const Profile: React.FC = (): JSX.Element => {
   }, [form]);
 
   // Manipulación de foto (Zoom, Rotar, Resetear)
-  const updateFormWithPhotoProps = useCallback((newProps: Partial<Usuario>) => {
+  const updateFormWithPhotoProps = useCallback(async (newProps: Partial<Usuario>) => {
     setForm(prevForm => {
         const updatedForm = { ...prevForm, ...newProps };
         if (edit) {
-            saveUserDataLocally(updatedForm); // Autoguardar las propiedades de la foto también
+            saveUserDataLocally(updatedForm).catch(error => {
+              console.error('Error en autoguardado de propiedades de foto:', error);
+              // No mostramos un toast adicional para no sobrecargar al usuario
+            });
         }
         return updatedForm;
     });
   }, [edit, saveUserDataLocally]);
 
-  const handleZoomIn = useCallback(() => {
+  const handleZoomIn = useCallback(async () => {
     setZoomLevel(prev => { const newZoom = Math.min(prev + 0.1, 3); updateFormWithPhotoProps({ fotoZoom: newZoom }); return newZoom; });
   }, [updateFormWithPhotoProps]);
 
-  const handleZoomOut = useCallback(() => {
+  const handleZoomOut = useCallback(async () => {
     setZoomLevel(prev => { const newZoom = Math.max(prev - 0.1, 0.5); updateFormWithPhotoProps({ fotoZoom: newZoom }); return newZoom; });
   }, [updateFormWithPhotoProps]);
 
-  const handleRotate = useCallback(() => {
+  const handleRotate = useCallback(async () => {
     setRotation(prev => { const newRotation = (prev + 90) % 360; updateFormWithPhotoProps({ fotoRotation: newRotation }); return newRotation; });
   }, [updateFormWithPhotoProps]);
 
-  const handleResetImage = useCallback(() => {
+  const handleResetImage = useCallback(async () => {
     setZoomLevel(1);
     setRotation(0);
     setPosition({ x: 0, y: 0 });
-    updateFormWithPhotoProps({
+    await updateFormWithPhotoProps({
       fotoZoom: 1,
       fotoRotation: 0,
       fotoPositionX: 0,
@@ -366,10 +417,10 @@ const Profile: React.FC = (): JSX.Element => {
     }
   }, [isDragging, edit, fotoPreview]);
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback(async () => {
     setIsDragging(false);
     if (edit) {
-        updateFormWithPhotoProps({ fotoPositionX: position.x, fotoPositionY: position.y });
+        await updateFormWithPhotoProps({ fotoPositionX: position.x, fotoPositionY: position.y });
     }
   }, [edit, position, updateFormWithPhotoProps]);
 
@@ -405,19 +456,58 @@ const Profile: React.FC = (): JSX.Element => {
           fotoPositionY: position.y,
       };
 
-      // Simular la llamada API a tu backend
-      const updatedUser = await simulateApiUpdate(payload);
+      // Eliminar propiedades que no deberían enviarse al backend
+      delete payload.fotoZoom;
+      delete payload.fotoRotation;
+      delete payload.fotoPositionX;
+      delete payload.fotoPositionY;
+      
+      // Llamar a la API para guardar los cambios
+      const updatedUser = await updateUserProfile(payload);
 
       setEdit(false);
       if (setUsuario) {
-          setUsuario(updatedUser); // Actualiza contexto de autenticación
+          // Asegurarse de que el rol se mantenga correctamente en el contexto
+          const rolActual = usuario?.rol;
+          setUsuario({
+            ...updatedUser,
+            rol: rolActual,
+            // Mantener las propiedades de manipulación de foto que no se guardan en el backend
+            fotoZoom: zoomLevel,
+            fotoRotation: rotation,
+            fotoPositionX: position.x,
+            fotoPositionY: position.y,
+          }); // Actualiza contexto de autenticación
       }
-      localStorage.setItem('usuario', JSON.stringify(updatedUser)); // Actualiza localStorage
+      // Guardar en localStorage con todas las propiedades
+      localStorage.setItem('usuario', JSON.stringify({
+        ...updatedUser,
+        rol: usuario?.rol,
+        fotoZoom: zoomLevel,
+        fotoRotation: rotation,
+        fotoPositionX: position.x,
+        fotoPositionY: position.y,
+      }));
 
       showThemedToast('Perfil actualizado y guardado correctamente.', 'success');
     } catch (err: any) {
-      showThemedToast('No se pudo guardar: ' + (err.message || 'Error desconocido'), 'error');
       console.error("Save error:", err);
+      
+      // Proporcionar un mensaje de error más específico
+      let errorMessage = 'Error desconocido al guardar el perfil';
+      
+      if (err.response) {
+        // Error de respuesta del servidor
+        errorMessage = err.response.data?.message || `Error del servidor (${err.response.status})`;
+      } else if (err.message) {
+        // Error de la aplicación
+        errorMessage = err.message;
+      } else if (typeof err === 'string') {
+        // Error como string
+        errorMessage = err;
+      }
+      
+      showThemedToast(`No se pudo guardar: ${errorMessage}`, 'error');
     }
   };
 
@@ -457,6 +547,24 @@ const Profile: React.FC = (): JSX.Element => {
 
   // Helper para determinar el rol principal a mostrar
   const getRolPrincipal = useCallback((): string => {
+    // Primero intentar obtener el rol del contexto de autenticación
+    if (usuario && usuario.rol) {
+      return usuario.rol;
+    }
+    
+    // Si no está en el contexto, intentar obtenerlo del localStorage
+    try {
+      const storedUser = localStorage.getItem('usuario');
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        if (parsedUser && parsedUser.rol) {
+          return parsedUser.rol;
+        }
+      }
+    } catch (error) {
+      console.error('Error al obtener usuario del localStorage:', error);
+    }
+    // Si no está en el contexto, usar el formulario
     const rolesArray = Array.isArray(form.roles) ? form.roles : (typeof form.roles === 'string' ? form.roles.split(',').map(r => r.trim()).filter(Boolean) : []);
     
     // Prioridad para mostrar el rol más "alto" o significativo
@@ -464,7 +572,7 @@ const Profile: React.FC = (): JSX.Element => {
     if (rolesArray.some(r => r.toLowerCase() === 'jefe')) return 'jefe_departamento';
     if (rolesArray.some(r => r.toLowerCase() === 'tecnico')) return 'tecnico';
     return 'usuario';
-  }, [form.roles]);
+  }, [form.roles, usuario]);
 
   // Preguntas Frecuentes, adaptadas a Lucide Icons y colores, con rol dinámico.
   const getPreguntasFrecuentes = useCallback((): PreguntaFrecuente[] => {

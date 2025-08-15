@@ -14,6 +14,8 @@ import {
   Info,
   X,
   Eye} from 'lucide-react';
+import { API_BASE_URL, API_ENDPOINTS } from '../services/apiConfig';
+import api from '../api';
 
 // Interfaz para el tipo de Reporte original desde la API
 interface Reporte {
@@ -121,18 +123,16 @@ const Home: React.FC = () => {
           throw new Error("No hay token de autenticación. Por favor, inicia sesión.");
         }
 
-        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/reportes`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+        const res = await api.get(API_ENDPOINTS.REPORTES, config);
 
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({ message: 'Error desconocido.' }));
-          throw new Error(`Error ${res.status}: ${errorData.message || res.statusText}`);
+        if (!res.data) {
+          throw new Error('No se recibieron datos del servidor');
         }
 
-        const reportes: Reporte[] = await res.json();
+        // Verificar si data es un array, si no lo es, intentar obtener la propiedad correcta
+        const data = res.data;
+        const reportes: Reporte[] = Array.isArray(data) ? data : (data.reportes || data.data || []);
 
         if (!Array.isArray(reportes)) {
           throw new Error('Formato de datos de reportes incorrecto.');
