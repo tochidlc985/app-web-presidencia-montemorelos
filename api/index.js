@@ -33,8 +33,8 @@ app.use(cors({
       'http://127.0.0.1:5713'
     ];
     
-    // En Vercel, permitir también el dominio vercel.app
-    if (isVercel && origin && origin.includes('.vercel.app')) {
+    // En Vercel, permitir también cualquier subdominio de vercel.app
+    if (origin && origin.includes('.vercel.app')) {
       return callback(null, true);
     }
     
