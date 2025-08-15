@@ -85,30 +85,44 @@ function verifyToken(req, res, next) {
 // Rutas de la API
 app.post('/api/login', async (req, res) => {
   try {
+    console.log('Intento de login recibido:', req.body);
+    
     const { email, password } = req.body;
-
+    
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email y contraseña son requeridos' });
+    }
+    
     // Conectar a la base de datos
     const database = await connectToDatabase();
-
+    
     // Buscar usuario en la base de datos
     const user = await database.collection('usuarios').findOne({ email });
-
-    if (!user || user.password !== password) {
-      return res.status(401).json({ message: 'Credenciales inválidas' });
+    
+    console.log('Usuario encontrado:', user ? 'Sí' : 'No');
+    
+    if (!user) {
+      return res.status(401).json({ message: 'Usuario no encontrado' });
     }
-
+    
+    if (user.password !== password) {
+      return res.status(401).json({ message: 'Contraseña incorrecta' });
+    }
+    
     // Generar token JWT
     const token = jwt.sign(
-      { id: user._id, email: user.email, rol: user.rol },
+      { id: user._id.toString(), email: user.email, rol: user.rol },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
-
+    
+    console.log('Login exitoso para:', email);
+    
     res.json({
       message: 'Login exitoso',
       token,
       user: {
-        id: user._id,
+        id: user._id.toString(),
         email: user.email,
         nombre: user.nombre,
         rol: user.rol

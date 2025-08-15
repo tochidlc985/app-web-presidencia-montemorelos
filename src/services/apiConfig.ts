@@ -4,7 +4,7 @@ const isVercel = typeof window !== 'undefined' && window.location.hostname.inclu
 
 // URL base para la API
 export const API_BASE_URL = isVercel || import.meta.env.PROD
-  ? ''
+  ? window.location.origin
   : 'http://localhost:4000';
 
 // URL ajustada para evitar problemas con rutas duplicadas
