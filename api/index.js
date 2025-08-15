@@ -118,7 +118,7 @@ app.post('/api/login', async (req, res) => {
     
     console.log('Login exitoso para:', email);
     
-    res.json({
+    const responseData = {
       message: 'Login exitoso',
       token,
       user: {
@@ -126,6 +126,12 @@ app.post('/api/login', async (req, res) => {
         email: user.email,
         nombre: user.nombre,
         rol: user.rol
+      }
+    };
+    
+    console.log('Enviando respuesta:', JSON.stringify(responseData));
+    
+    res.json(responseData);
       }
     });
   } catch (error) {

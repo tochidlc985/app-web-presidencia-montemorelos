@@ -42,21 +42,23 @@ const Login: React.FC = () => {
       }
 
       const resData = res.data;
+      console.log('Respuesta del servidor:', resData);
 
       // Guardar token y usuario en localStorage
       if (resData.token) {
         localStorage.setItem('token', resData.token);
+        console.log('Token guardado en localStorage');
       }
-      if (resData.usuario) {
+      if (resData.user) { // Cambiado de resData.usuario a resData.user para coincidir con el backend
         const usuarioCompleto = {
-          _id: resData.usuario._id || '',
-          nombre: resData.usuario.nombre || '',
-          email: resData.usuario.email || '',
-          departamento: resData.usuario.departamento || '',
-          roles: Array.isArray(resData.usuario.roles) ? resData.usuario.roles : [resData.usuario.rol || 'usuario'],
-          foto: resData.usuario.foto || null,
-          fechaRegistro: resData.usuario.fechaRegistro || new Date().toISOString(),
-          ...resData.usuario // Mantener cualquier otra propiedad adicional
+          _id: resData.user.id || '',
+          nombre: resData.user.nombre || '',
+          email: resData.user.email || '',
+          departamento: resData.user.departamento || '',
+          roles: Array.isArray(resData.user.roles) ? resData.user.roles : [resData.user.rol || 'usuario'],
+          foto: resData.user.foto || null,
+          fechaRegistro: resData.user.fechaRegistro || new Date().toISOString(),
+          ...resData.user // Mantener cualquier otra propiedad adicional
         };
 
         localStorage.setItem('usuario', JSON.stringify(usuarioCompleto));
