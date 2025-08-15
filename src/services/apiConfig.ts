@@ -1,10 +1,13 @@
 // Configuración centralizada de la API
-export const API_BASE_URL = import.meta.env.PROD
+// Detectar si estamos en Vercel para usar siempre la URL de producción
+const isVercel = window.location.hostname.includes('vercel.app');
+
+export const API_BASE_URL = isVercel || import.meta.env.PROD
   ? import.meta.env.VITE_API_BASE_URL || 'https://sistema-reportes-montemorelos.vercel.app'
   : 'http://localhost:4000';
 
 // Ajustar la URL base para Vercel para evitar la doble ruta /api/api/
-export const ADJUSTED_API_BASE_URL = import.meta.env.PROD
+export const ADJUSTED_API_BASE_URL = isVercel || import.meta.env.PROD
   ? (import.meta.env.VITE_API_BASE_URL || 'https://sistema-reportes-montemorelos.vercel.app').replace('/api', '')
   : 'http://localhost:4000';
 
