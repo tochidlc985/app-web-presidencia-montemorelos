@@ -19,9 +19,28 @@ const PORT = process.env.PORT || 4000;
 
 // Middleware globales
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? 'https://tudominio.com' : '*',
+  origin: function (origin, callback) {
+    // Permitir solicitudes sin origen (como apps móviles)
+    if (!origin) return callback(null, true);
+    
+    // Permitir el origen de producción y desarrollo
+    const allowedOrigins = [
+      process.env.FRONTEND_URL,
+      'https://sistema-reportes-montemorelos.vercel.app',
+      'http://localhost:5713',
+      'http://localhost:3000'
+    ];
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('Origen bloqueado por CORS:', origin);
+      callback(new Error('No permitido por CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 app.use(bodyParser.json({ limit: '20mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '20mb' }));
