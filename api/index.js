@@ -7,7 +7,7 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import { fileURLToPath } from 'url';
-import { db } from '../database.js';
+import db from '../database.js';
 
 // Detectar si estamos en Vercel
 const isVercel = process.env.VERCEL === '1' || !!process.env.NOW_REGION;
