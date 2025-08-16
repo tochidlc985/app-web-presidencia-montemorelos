@@ -7,7 +7,7 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import { fileURLToPath } from 'url';
-import { MongoClient, ObjectId } from 'mongodb';
+import { db } from '../database.js';
 
 // Configuración para Vercel
 const isVercel = process.env.VERCEL === '1';
@@ -21,7 +21,33 @@ const app = express();
 
 // Middleware globales con CORS mejorado
 app.use(cors({
-  origin: true,
+  origin: function (origin, callback) {
+    // Permitir solicitudes sin origen (como apps móviles)
+    if (!origin) return callback(null, true);
+
+    // Permitir cualquier subdominio de vercel.app
+    if (origin && origin.includes('.vercel.app')) {
+      return callback(null, true);
+    }
+
+    // Permitir cualquier origen en desarrollo
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+
+    // Permitir el origen de producción
+    const allowedOrigins = [
+      process.env.FRONTEND_URL || 'https://sistema-reportes-montemorelos.vercel.app',
+      'https://sistema-reportes-montemorelos.vercel.app'
+    ];
+
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('Origen bloqueado por CORS:', origin);
+      callback(new Error('No permitido por CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
@@ -46,25 +72,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// Conexión a MongoDB
-let db;
-let client;
-
-async function connectToDatabase() {
-  if (db) return db;
-
-  try {
-    client = new MongoClient(process.env.MONGO_URI);
-    await client.connect();
-    db = client.db('Montemorelos');
-    console.log('Conectado a MongoDB');
-    return db;
-  } catch (error) {
-    console.error('Error al conectar a MongoDB:', error);
-    throw error;
-  }
-}
-
 // Middleware para verificar el token JWT
 function verifyToken(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1];
@@ -85,58 +92,35 @@ function verifyToken(req, res, next) {
 // Rutas de la API
 app.post('/api/login', async (req, res) => {
   try {
-    console.log('Intento de login recibido:', req.body);
-    
     const { email, password } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Email y contraseña son requeridos' });
-    }
-    
-    // Conectar a la base de datos
-    const database = await connectToDatabase();
-    
+
     // Buscar usuario en la base de datos
-    const user = await database.collection('usuarios').findOne({ email });
-    
-    console.log('Usuario encontrado:', user ? 'Sí' : 'No');
-    
-    if (!user) {
-      return res.status(401).json({ message: 'Usuario no encontrado' });
+    const user = await db.collection('usuarios').findOne({ email });
+
+    if (!user || user.password !== password) {
+      return res.status(401).json({ message: 'Credenciales inválidas' });
     }
-    
-    if (user.password !== password) {
-      return res.status(401).json({ message: 'Contraseña incorrecta' });
-    }
-    
+
     // Generar token JWT
     const token = jwt.sign(
-      { id: user._id.toString(), email: user.email, rol: user.rol },
+      { id: user._id, email: user.email, rol: user.rol },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
-    
-    console.log('Login exitoso para:', email);
-    
-    const responseData = {
+
+    res.json({
       message: 'Login exitoso',
       token,
       user: {
-        id: user._id.toString(),
+        id: user._id,
         email: user.email,
         nombre: user.nombre,
         rol: user.rol
       }
-    };
-    
-    console.log('Enviando respuesta:', JSON.stringify(responseData));
-    
-    res.json(responseData);
-      }
     });
   } catch (error) {
     console.error('Error en login:', error);
-    res.status(500).json({ message: 'Error en el servidor', error: error.message });
+    res.status(500).json({ message: 'Error en el servidor' });
   }
 });
 
@@ -144,11 +128,8 @@ app.post('/api/register', async (req, res) => {
   try {
     const { email, password, nombre, rol } = req.body;
 
-    // Conectar a la base de datos
-    const database = await connectToDatabase();
-
     // Verificar si el usuario ya existe
-    const existingUser = await database.collection('usuarios').findOne({ email });
+    const existingUser = await db.collection('usuarios').findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: 'El usuario ya existe' });
     }
@@ -161,7 +142,7 @@ app.post('/api/register', async (req, res) => {
       rol: rol || 'usuario'
     };
 
-    const result = await database.collection('usuarios').insertOne(newUser);
+    const result = await db.collection('usuarios').insertOne(newUser);
 
     // Generar token JWT
     const token = jwt.sign(
@@ -182,17 +163,14 @@ app.post('/api/register', async (req, res) => {
     });
   } catch (error) {
     console.error('Error en registro:', error);
-    res.status(500).json({ message: 'Error en el servidor', error: error.message });
+    res.status(500).json({ message: 'Error en el servidor' });
   }
 });
 
 // Ruta para obtener el perfil del usuario
 app.get('/api/perfil', verifyToken, async (req, res) => {
   try {
-    // Conectar a la base de datos
-    const database = await connectToDatabase();
-
-    const user = await database.collection('usuarios').findOne(
+    const user = await db.collection('usuarios').findOne(
       { _id: new ObjectId(req.user.id) },
       { projection: { password: 0 } }
     );
@@ -204,7 +182,7 @@ app.get('/api/perfil', verifyToken, async (req, res) => {
     res.json(user);
   } catch (error) {
     console.error('Error al obtener perfil:', error);
-    res.status(500).json({ message: 'Error en el servidor', error: error.message });
+    res.status(500).json({ message: 'Error en el servidor' });
   }
 });
 
@@ -212,9 +190,6 @@ app.get('/api/perfil', verifyToken, async (req, res) => {
 app.post('/api/reportes', verifyToken, upload.single('imagen'), async (req, res) => {
   try {
     const { titulo, descripcion, categoria, ubicacion } = req.body;
-
-    // Conectar a la base de datos
-    const database = await connectToDatabase();
 
     const nuevoReporte = {
       titulo,
@@ -228,7 +203,7 @@ app.post('/api/reportes', verifyToken, upload.single('imagen'), async (req, res)
       estado: 'pendiente'
     };
 
-    const result = await database.collection('reportes').insertOne(nuevoReporte);
+    const result = await db.collection('reportes').insertOne(nuevoReporte);
 
     res.status(201).json({
       message: 'Reporte creado exitosamente',
@@ -239,38 +214,32 @@ app.post('/api/reportes', verifyToken, upload.single('imagen'), async (req, res)
     });
   } catch (error) {
     console.error('Error al crear reporte:', error);
-    res.status(500).json({ message: 'Error en el servidor', error: error.message });
+    res.status(500).json({ message: 'Error en el servidor' });
   }
 });
 
 // Ruta para obtener todos los reportes
 app.get('/api/reportes', verifyToken, async (req, res) => {
   try {
-    // Conectar a la base de datos
-    const database = await connectToDatabase();
-
-    const reportes = await database.collection('reportes').find({}).toArray();
+    const reportes = await db.collection('reportes').find({}).toArray();
 
     res.json(reportes);
   } catch (error) {
     console.error('Error al obtener reportes:', error);
-    res.status(500).json({ message: 'Error en el servidor', error: error.message });
+    res.status(500).json({ message: 'Error en el servidor' });
   }
 });
 
 // Ruta para obtener estadísticas
 app.get('/api/estadisticas', verifyToken, async (req, res) => {
   try {
-    // Conectar a la base de datos
-    const database = await connectToDatabase();
-
     // Contar reportes por estado
-    const pendientes = await database.collection('reportes').countDocuments({ estado: 'pendiente' });
-    const enProceso = await database.collection('reportes').countDocuments({ estado: 'en_proceso' });
-    const resueltos = await database.collection('reportes').countDocuments({ estado: 'resuelto' });
+    const pendientes = await db.collection('reportes').countDocuments({ estado: 'pendiente' });
+    const enProceso = await db.collection('reportes').countDocuments({ estado: 'en_proceso' });
+    const resueltos = await db.collection('reportes').countDocuments({ estado: 'resuelto' });
 
     // Contar reportes por categoría
-    const categorias = await database.collection('reportes').aggregate([
+    const categorias = await db.collection('reportes').aggregate([
       { $group: { _id: '$categoria', count: { $sum: 1 } } }
     ]).toArray();
 
@@ -284,7 +253,7 @@ app.get('/api/estadisticas', verifyToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Error al obtener estadísticas:', error);
-    res.status(500).json({ message: 'Error en el servidor', error: error.message });
+    res.status(500).json({ message: 'Error en el servidor' });
   }
 });
 
