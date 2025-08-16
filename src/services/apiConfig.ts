@@ -5,6 +5,7 @@ const isProduction = import.meta.env.PROD;
 
 // URL base para la API
 // En Vercel, las solicitudes a la API deben ir al mismo dominio
+// En dispositivos móviles, usamos la URL completa para evitar problemas
 export const API_BASE_URL = isVercel || isProduction
   ? '' // Cadena vacía para usar el mismo dominio en Vercel
   : 'http://localhost:4000';

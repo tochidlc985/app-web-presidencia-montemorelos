@@ -34,6 +34,11 @@ app.use(cors({
       return callback(null, true);
     }
 
+    // Permitir solicitudes desde dispositivos móviles (como los que vienen de un QR)
+    if (origin && process.env.NODE_ENV === 'production') {
+      return callback(null, true);
+    }
+
     const allowedOrigins = [
       process.env.FRONTEND_URL || 'https://sistema-reportes-montemorelos.vercel.app'
     ];
