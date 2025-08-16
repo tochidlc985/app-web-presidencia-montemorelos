@@ -130,7 +130,7 @@ function verifyAuth(req, res, next) {
 ======================== */
 
 // Crear un nuevo reporte con imágenes
-app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
+app.post('/reportes', upload.array('imagenes', 10), async (req, res) => {
   try {
     const files = req.files || [];
     const reporte = req.body.data ? JSON.parse(req.body.data) : req.body;
@@ -164,7 +164,7 @@ app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
 });
 
 // Obtener todos los reportes
-app.get('/api/reportes', async (req, res) => {
+app.get('/reportes', async (req, res) => {
   try {
     const reportes = await db.obtenerReportes();
     res.json(reportes);
@@ -174,7 +174,7 @@ app.get('/api/reportes', async (req, res) => {
 });
 
 // Actualizar estado o prioridad del reporte (solo admin)
-app.patch('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
+app.patch('/reportes/:id', requireRole('administrador'), async (req, res) => {
   try {
     const { id } = req.params;
     const update = req.body;
@@ -190,7 +190,7 @@ app.patch('/api/reportes/:id', requireRole('administrador'), async (req, res) =>
 });
 
 // Eliminar reporte (solo admin)
-app.delete('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
+app.delete('/reportes/:id', requireRole('administrador'), async (req, res) => {
   try {
     const { id } = req.params;
     const reporte = await db.obtenerReportePorId(id);
@@ -219,7 +219,7 @@ app.delete('/api/reportes/:id', requireRole('administrador'), async (req, res) =
 ======================== */
 
 // Registrar usuario
-app.post('/api/register', async (req, res) => {
+app.post('/register', async (req, res) => {
   try {
     const { nombre, email, password, rol } = req.body;
     if (!nombre || !email || !password || !rol) {
@@ -245,7 +245,7 @@ app.post('/api/register', async (req, res) => {
 });
 
 // Login usuario
-app.post('/api/login', async (req, res) => {
+app.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -267,7 +267,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 // Obtener perfil de usuario (por token)
-app.get('/api/perfil', verifyAuth, async (req, res) => {
+app.get('/perfil', verifyAuth, async (req, res) => {
   try {
     const perfil = await db.buscarPerfilPorEmail(req.user.email);
     if (!perfil) return res.status(404).json({ message: 'Perfil no encontrado' });
@@ -278,7 +278,7 @@ app.get('/api/perfil', verifyAuth, async (req, res) => {
 });
 
 // Obtener perfil de usuario (por email)
-app.get('/api/perfil/:email', async (req, res) => {
+app.get('/perfil/:email', async (req, res) => {
   try {
     const perfil = await db.buscarPerfilPorEmail(req.params.email);
     if (!perfil) return res.status(404).json({ message: 'Perfil no encontrado' });
@@ -289,7 +289,7 @@ app.get('/api/perfil/:email', async (req, res) => {
 });
 
 // Actualizar perfil de usuario (por token)
-app.put('/api/perfil', verifyAuth, async (req, res) => {
+app.put('/perfil', verifyAuth, async (req, res) => {
   try {
     const ok = await db.actualizarPerfilUsuario(req.user.email, req.body);
     if (ok) {
@@ -303,7 +303,7 @@ app.put('/api/perfil', verifyAuth, async (req, res) => {
 });
 
 // Actualizar perfil de usuario (por email)
-app.put('/api/perfil/:email', async (req, res) => {
+app.put('/perfil/:email', async (req, res) => {
   try {
     const ok = await db.actualizarPerfilUsuario(req.params.email, req.body);
     if (ok) {
@@ -317,7 +317,7 @@ app.put('/api/perfil/:email', async (req, res) => {
 });
 
 // Estadísticas
-app.get('/api/estadisticas', async (req, res) => {
+app.get('/estadisticas', async (req, res) => {
   try {
     const stats = await db.obtenerEstadisticas();
     res.json(stats);
