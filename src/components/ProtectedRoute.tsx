@@ -12,6 +12,16 @@ const allowedRoles = ['usuario', 'administrador', 'jefe_departamento', 'tecnico'
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { usuario, isLoggedIn, logout } = useAuth(); // Usamos useAuth
 
+  // Evitar problemas de hidratación en SSR
+  const [isClient, setIsClient] = React.useState(false);
+  React.useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  if (!isClient) {
+    return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
+  }
+
   // Verifica el rol solo si hay un usuario logueado en el contexto
   const currentUserRoles = Array.isArray(usuario?.roles)
     ? usuario.roles.map(role => role.toLowerCase())
@@ -23,13 +33,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
   const hasValidRole = allowedRoles.some(allowedRole => currentUserRoles.includes(allowedRole));
 
-
-
   // Consideramos si la ruta está protegida por ambos, la autenticación y el rol
   const isAuthenticatedAndAuthorized = isLoggedIn() && hasValidRole;
 
   useEffect(() => {
-    if (!isAuthenticatedAndAuthorized) {
+    if (isClient && !isAuthenticatedAndAuthorized) {
       if (usuario && !hasValidRole) {
         toast.error('Su rol no tiene permisos para acceder a esta página.');
         logout(); // Limpia los datos de autenticación
@@ -37,7 +45,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         toast.error('Inicie sesión para acceder a esta página.');
       }
     }
-  }, [isAuthenticatedAndAuthorized, usuario, hasValidRole, logout, isLoggedIn]);
+  }, [isClient, isAuthenticatedAndAuthorized, usuario, hasValidRole, logout, isLoggedIn]);
 
   // Si no está autenticado O no tiene un rol válido, redirige a /login
   if (!isAuthenticatedAndAuthorized) {

@@ -32,29 +32,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('usuario');
-      if (stored) {
-        const parsedUser = JSON.parse(stored);
-        // Asegurarnos de que el objeto de usuario tenga todas las propiedades necesarias
-        setUsuarioState({
-          _id: '',
-          nombre: '',
-          email: '',
-          departamento: '',
-          roles: [],
-          foto: null,
-          fechaRegistro: '',
-          tamanoFoto: 150,
-          ...parsedUser // Sobrescribir con los datos almacenados
-        });
-      }
-    } catch (error) {
-      console.error("Error parsing user from localStorage:", error);
-      localStorage.removeItem('usuario');
-    } finally {
+    // Evitar ejecutar en el servidor (SSR)
+    if (typeof window === 'undefined') {
       setIsLoading(false);
+      return;
     }
+
+    const initializeAuth = async () => {
+      try {
+        const stored = localStorage.getItem('usuario');
+        const token = localStorage.getItem('token');
+
+        if (stored && token) {
+          const parsedUser = JSON.parse(stored);
+          // Asegurarnos de que el objeto de usuario tenga todas las propiedades necesarias
+          setUsuarioState({
+            _id: '',
+            nombre: '',
+            email: '',
+            departamento: '',
+            roles: [],
+            foto: null,
+            fechaRegistro: '',
+            tamanoFoto: 150,
+            ...parsedUser // Sobrescribir con los datos almacenados
+          });
+        }
+      } catch (error) {
+        console.error("Error parsing user from localStorage:", error);
+        localStorage.removeItem('usuario');
+        localStorage.removeItem('token');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeAuth();
   }, []);
 
   const setUsuario = useCallback((user: Usuario | null) => {

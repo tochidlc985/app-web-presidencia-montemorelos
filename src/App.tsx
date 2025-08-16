@@ -37,8 +37,14 @@ function App() {
 const AppContent: React.FC = () => {
   const { isLoggedIn, isLoading } = useAuth();
 
-  if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
+  // Evitar problemas de hidratación en SSR
+  const [isClient, setIsClient] = React.useState(false);
+  React.useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  if (!isClient || isLoading) {
+    return <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">Cargando...</div>;
   }
 
   if (!isLoggedIn()) {
