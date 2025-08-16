@@ -14,41 +14,41 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
   // Evitar problemas de hidratación en SSR
   const [isClient, setIsClient] = React.useState(false);
+  const [isAuthorized, setIsAuthorized] = React.useState(false);
+
   React.useEffect(() => {
     setIsClient(true);
-  }, []);
+
+    // Verificar autorización solo en el cliente
+    if (isLoggedIn()) {
+      // Verifica el rol solo si hay un usuario logueado en el contexto
+      const currentUserRoles = Array.isArray(usuario?.roles)
+        ? usuario.roles.map(role => role.toLowerCase())
+        : typeof usuario?.roles === 'string'
+        ? usuario.roles.split(',').map(r => r.trim().toLowerCase())
+        : usuario?.rol
+        ? [usuario.rol.toLowerCase()]
+        : [];
+
+      const hasValidRole = allowedRoles.some(allowedRole => currentUserRoles.includes(allowedRole));
+
+      if (!hasValidRole) {
+        toast.error('Su rol no tiene permisos para acceder a esta página.');
+        logout(); // Limpia los datos de autenticación
+      }
+
+      setIsAuthorized(hasValidRole);
+    } else {
+      setIsAuthorized(false);
+    }
+  }, [isLoggedIn, usuario, logout]);
 
   if (!isClient) {
     return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
   }
 
-  // Verifica el rol solo si hay un usuario logueado en el contexto
-  const currentUserRoles = Array.isArray(usuario?.roles)
-    ? usuario.roles.map(role => role.toLowerCase())
-    : typeof usuario?.roles === 'string'
-    ? usuario.roles.split(',').map(r => r.trim().toLowerCase())
-    : usuario?.rol
-    ? [usuario.rol.toLowerCase()]
-    : [];
-
-  const hasValidRole = allowedRoles.some(allowedRole => currentUserRoles.includes(allowedRole));
-
-  // Consideramos si la ruta está protegida por ambos, la autenticación y el rol
-  const isAuthenticatedAndAuthorized = isLoggedIn() && hasValidRole;
-
-  useEffect(() => {
-    if (isClient && !isAuthenticatedAndAuthorized) {
-      if (usuario && !hasValidRole) {
-        toast.error('Su rol no tiene permisos para acceder a esta página.');
-        logout(); // Limpia los datos de autenticación
-      } else if (!isLoggedIn()) {
-        toast.error('Inicie sesión para acceder a esta página.');
-      }
-    }
-  }, [isClient, isAuthenticatedAndAuthorized, usuario, hasValidRole, logout, isLoggedIn]);
-
   // Si no está autenticado O no tiene un rol válido, redirige a /login
-  if (!isAuthenticatedAndAuthorized) {
+  if (!isAuthorized) {
     return <Navigate to="/login" replace />;
   }
 

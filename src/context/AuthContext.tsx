@@ -91,10 +91,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         tamanoFoto: user.tamanoFoto || 150,
         ...user // Mantener cualquier otra propiedad adicional
       };
-      localStorage.setItem('usuario', JSON.stringify(userToStore));
-      setUsuarioState(userToStore);
+
+      try {
+        localStorage.setItem('usuario', JSON.stringify(userToStore));
+        setUsuarioState(userToStore);
+      } catch (error) {
+        console.error('Error al guardar usuario:', error);
+        setUsuarioState(userToStore); // Establecer el estado incluso si falla localStorage
+      }
     } else {
-      localStorage.removeItem('usuario');
+      try {
+        localStorage.removeItem('usuario');
+      } catch (error) {
+        console.error('Error al eliminar usuario de localStorage:', error);
+      }
       setUsuarioState(null);
     }
   }, []);
@@ -139,17 +149,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [usuario, logout]);
 
   const logout = useCallback(() => {
-    // Guardar nombre y rol en sessionStorage para la página de Logout
-    if (usuario?.nombre) {
-      sessionStorage.setItem('lastUserName', usuario.nombre);
+    try {
+      // Guardar nombre y rol en sessionStorage para la página de Logout
+      if (usuario?.nombre) {
+        sessionStorage.setItem('lastUserName', usuario.nombre);
+      }
+      if (usuario?.roles) {
+        const rol = Array.isArray(usuario.roles) ? usuario.roles[0] : usuario.roles;
+        sessionStorage.setItem('lastUserRole', rol);
+      }
+      localStorage.removeItem('token');
+    } catch (error) {
+      console.error('Error durante logout:', error);
+    } finally {
+      setUsuario(null);
     }
-    if (usuario?.roles) {
-      const rol = Array.isArray(usuario.roles) ? usuario.roles[0] : usuario.roles;
-      sessionStorage.setItem('lastUserRole', rol);
-    }
-    localStorage.removeItem('token');
-    setUsuario(null);
-  }, [usuario, setUsuario]);
+  }, [usuario]);
 
   const contextValue = {
     usuario,
