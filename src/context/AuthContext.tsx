@@ -115,6 +115,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return Boolean(token && usuario && usuario._id);
   }, [usuario]);
 
+  const logout = useCallback(() => {
+    try {
+      // Guardar nombre y rol en sessionStorage para la página de Logout
+      if (usuario?.nombre) {
+        sessionStorage.setItem('lastUserName', usuario.nombre);
+      }
+      if (usuario?.roles) {
+        const rol = Array.isArray(usuario.roles) ? usuario.roles[0] : usuario.roles;
+        sessionStorage.setItem('lastUserRole', rol);
+      }
+      localStorage.removeItem('token');
+    } catch (error) {
+      console.error('Error durante logout:', error);
+    } finally {
+      setUsuario(null);
+    }
+  }, [usuario]);
+
   // Verificar token válido en dispositivos móviles
   useEffect(() => {
     const checkToken = () => {
@@ -147,24 +165,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [usuario, logout]);
-
-  const logout = useCallback(() => {
-    try {
-      // Guardar nombre y rol en sessionStorage para la página de Logout
-      if (usuario?.nombre) {
-        sessionStorage.setItem('lastUserName', usuario.nombre);
-      }
-      if (usuario?.roles) {
-        const rol = Array.isArray(usuario.roles) ? usuario.roles[0] : usuario.roles;
-        sessionStorage.setItem('lastUserRole', rol);
-      }
-      localStorage.removeItem('token');
-    } catch (error) {
-      console.error('Error durante logout:', error);
-    } finally {
-      setUsuario(null);
-    }
-  }, [usuario]);
 
   const contextValue = {
     usuario,
