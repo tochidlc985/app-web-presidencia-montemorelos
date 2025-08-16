@@ -11,8 +11,9 @@ export const API_BASE_URL = isVercel || isProduction
   : 'http://localhost:4000';
 
 // URL absoluta para uso en dispositivos móviles y casos especiales
+// Verificamos si window está definido antes de acceder a location.origin
 export const ABSOLUTE_API_BASE_URL = isVercel || isProduction
-  ? window.location.origin // Usar el origen actual en producción
+  ? (typeof window !== 'undefined' ? window.location.origin : '') // Usar el origen actual en producción
   : 'http://localhost:4000';
 
 // URL ajustada para evitar problemas con rutas duplicadas

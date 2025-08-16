@@ -58,7 +58,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const setUsuario = useCallback((user: Usuario | null) => {
-    setUsuarioState(user);
     if (user) {
       // Asegurarnos de que todos los campos necesarios estén presentes antes de guardar
       // Manejar tanto roles como un array como como un string simple
@@ -80,8 +79,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         ...user // Mantener cualquier otra propiedad adicional
       };
       localStorage.setItem('usuario', JSON.stringify(userToStore));
+      setUsuarioState(userToStore);
     } else {
       localStorage.removeItem('usuario');
+      setUsuarioState(null);
     }
   }, []);
 
