@@ -26,7 +26,8 @@ app.use(cors({
     // Permitir el origen de producción y desarrollo
     const allowedOrigins = [
       process.env.FRONTEND_URL,
-      'https://sistema-reportes-montemorelos.vercel.app'
+      'https://sistema-reportes-montemorelos.vercel.app',
+      'http://localhost:5713'
     ];
     
     // Si estamos en desarrollo, permitir cualquier origen localhost

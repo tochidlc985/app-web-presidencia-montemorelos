@@ -5,8 +5,22 @@ import toast from 'react-hot-toast';
 import { Mail, Lock, LogIn, UserPlus,  Loader2, Info, Aperture, } from 'lucide-react'; // Importa más iconos si los necesitas
 import { motion } from 'framer-motion';
 import ReactDOM from 'react-dom';
-import { API_BASE_URL, API_ENDPOINTS } from '../services/apiConfig';
+import { API_ENDPOINTS } from '../services/apiConfig';
 import api from '../api';
+
+interface LoginResponse {
+  token: string;
+  usuario: {
+    _id: string;
+    nombre: string;
+    email: string;
+    rol?: string;
+    roles?: string[];
+    departamento?: string;
+    foto?: string | null;
+    fechaRegistro?: string;
+  };
+}
 
 // Componente para el placeholder de la imagen del logo (en caso de que la imagen no cargue)
 const ImagePlaceholder: React.FC = () => (
@@ -34,7 +48,7 @@ const Login: React.FC = () => {
     setError('');
     setLoading(true);
     try {
-      const res = await api.post(API_ENDPOINTS.LOGIN, { email, password });
+      const res = await api.post<LoginResponse>(API_ENDPOINTS.LOGIN, { email, password });
 
       if (!res.data) {
         const msg = 'Error al iniciar sesión. Por favor, revisa tus credenciales.';
@@ -49,16 +63,17 @@ const Login: React.FC = () => {
         localStorage.setItem('token', resData.token);
         console.log('Token guardado en localStorage');
       }
-      if (resData.user) { // Cambiado de resData.usuario a resData.user para coincidir con el backend
+      if (resData.usuario) {
         const usuarioCompleto = {
-          _id: resData.user.id || '',
-          nombre: resData.user.nombre || '',
-          email: resData.user.email || '',
-          departamento: resData.user.departamento || '',
-          roles: Array.isArray(resData.user.roles) ? resData.user.roles : [resData.user.rol || 'usuario'],
-          foto: resData.user.foto || null,
-          fechaRegistro: resData.user.fechaRegistro || new Date().toISOString(),
-          ...resData.user // Mantener cualquier otra propiedad adicional
+          ...resData.usuario, // Primero obtenemos todas las propiedades originales
+          // Luego sobrescribimos o establecemos valores predeterminados para propiedades específicas
+          _id: resData.usuario._id || '',
+          nombre: resData.usuario.nombre || '',
+          email: resData.usuario.email || '',
+          departamento: resData.usuario.departamento || '',
+          roles: Array.isArray(resData.usuario.roles) ? resData.usuario.roles : [resData.usuario.rol || 'usuario'],
+          foto: resData.usuario.foto || null,
+          fechaRegistro: resData.usuario.fechaRegistro || new Date().toISOString()
         };
 
         localStorage.setItem('usuario', JSON.stringify(usuarioCompleto));
@@ -66,9 +81,7 @@ const Login: React.FC = () => {
       }
 
       toast.success('¡Bienvenido! Redirigiendo...');
-      setTimeout(() => {
-        window.location.href = '/home'; // Redirige completamente para asegurar carga de AuthContext
-      }, 1000);
+      window.location.href = '/home';
     } catch (err: any) {
       setError(err.message);
       toast.error(err.message);

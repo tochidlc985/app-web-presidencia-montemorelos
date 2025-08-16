@@ -35,7 +35,11 @@ function App() {
 }
 
 const AppContent: React.FC = () => {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
+  }
 
   if (!isLoggedIn()) {
     return (

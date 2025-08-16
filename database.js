@@ -55,8 +55,8 @@ class DatabaseService {
    * @returns {Db} Instancia de la base de datos conectada
    */
   async connectToDatabase(dbName) {
-    if (!this.client) {
-      this.client = new MongoClient(process.env.MONGO_URI);
+    if (!this.client || !this.client.topology || !this.client.topology.isConnected()) {
+      this.client = new MongoClient(this.MONGO_URI);
       await this.client.connect();
     }
     return this.client.db(dbName);

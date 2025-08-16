@@ -18,6 +18,7 @@ interface AuthContextType {
   setUsuario: (user: Usuario | null) => void;
   isLoggedIn: () => boolean;
   logout: () => void;
+  isLoading: boolean;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,6 +29,7 @@ interface AuthProviderProps {
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [usuario, setUsuarioState] = useState<Usuario | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     try {
@@ -50,6 +52,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error) {
       console.error("Error parsing user from localStorage:", error);
       localStorage.removeItem('usuario');
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -105,6 +109,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setUsuario,
     isLoggedIn,
     logout,
+    isLoading,
   };
 
   return (
