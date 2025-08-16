@@ -43,40 +43,47 @@ const AppContent: React.FC = () => {
     setIsClient(true);
   }, []);
 
-  if (!isClient) {
+  if (!isClient || isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">Cargando...</div>;
+  }
+
+  if (!isLoggedIn()) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/logout" element={<Logout />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
         <Route path="/logout" element={<Logout />} />
 
-        {isLoggedIn() ? (
-          <Route path="*" element={
-            <AppLayout>
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5 }}
-              >
-                <Routes>
-                  <Route path="/" element={<Navigate to="/home" replace />} />
-                  <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
-                  <Route path="/reporte" element={<ProtectedRoute><ReportForm /></ProtectedRoute>} />
-                  <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                  <Route path="/qr" element={<ProtectedRoute><QRGenerator /></ProtectedRoute>} />
-                  <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-                  <Route path="*" element={<Navigate to="/home" replace />} />
-                </Routes>
-              </motion.div>
-            </AppLayout>
-          } />
-        ) : (
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        )}
+        <Route path="*" element={
+          <AppLayout>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5 }}
+            >
+              <Routes>
+                <Route path="/" element={<Navigate to="/home" replace />} />
+                <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+                <Route path="/reporte" element={<ProtectedRoute><ReportForm /></ProtectedRoute>} />
+                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                <Route path="/qr" element={<ProtectedRoute><QRGenerator /></ProtectedRoute>} />
+                <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+                <Route path="*" element={<Navigate to="/home" replace />} />
+              </Routes>
+            </motion.div>
+          </AppLayout>
+        } />
       </Routes>
     </div>
   );

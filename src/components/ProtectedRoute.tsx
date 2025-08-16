@@ -18,9 +18,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
   React.useEffect(() => {
     setIsClient(true);
+  }, []);
 
+  React.useEffect(() => {
     // Verificar autorización solo en el cliente
-    if (isLoggedIn()) {
+    if (isClient && isLoggedIn()) {
       // Verifica el rol solo si hay un usuario logueado en el contexto
       const currentUserRoles = Array.isArray(usuario?.roles)
         ? usuario.roles.map(role => role.toLowerCase())
@@ -38,10 +40,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       }
 
       setIsAuthorized(hasValidRole);
-    } else {
+    } else if (isClient) {
       setIsAuthorized(false);
     }
-  }, [isLoggedIn, usuario, logout]);
+  }, [isClient, isLoggedIn, usuario, logout]);
 
   if (!isClient) {
     return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
