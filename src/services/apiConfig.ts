@@ -10,6 +10,11 @@ export const API_BASE_URL = isVercel || isProduction
   ? '' // Cadena vacía para usar el mismo dominio en Vercel
   : 'http://localhost:4000';
 
+// URL absoluta para uso en dispositivos móviles y casos especiales
+export const ABSOLUTE_API_BASE_URL = isVercel || isProduction
+  ? window.location.origin // Usar el origen actual en producción
+  : 'http://localhost:4000';
+
 // URL ajustada para evitar problemas con rutas duplicadas
 export const ADJUSTED_API_BASE_URL = API_BASE_URL;
 

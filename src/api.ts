@@ -1,8 +1,12 @@
 import axios from 'axios';
-import { ADJUSTED_API_BASE_URL } from './services/apiConfig';
+import { ADJUSTED_API_BASE_URL, ABSOLUTE_API_BASE_URL } from './services/apiConfig';
 
+// Detectar si estamos en un dispositivo móvil
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+// Usar URL absoluta en dispositivos móviles para evitar problemas
 const api = axios.create({
-  baseURL: ADJUSTED_API_BASE_URL,
+  baseURL: isMobile ? ABSOLUTE_API_BASE_URL : ADJUSTED_API_BASE_URL,
 });
 
 api.interceptors.request.use(

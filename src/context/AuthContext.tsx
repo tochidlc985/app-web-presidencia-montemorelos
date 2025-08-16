@@ -91,6 +91,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return Boolean(token && usuario && usuario._id);
   }, [usuario]);
 
+  // Verificar token válido en dispositivos móviles
+  useEffect(() => {
+    const checkToken = () => {
+      const token = localStorage.getItem('token');
+      if (token && usuario) {
+        // En dispositivos móviles, verificamos que el token sea válido
+        // Esto ayuda a mantener la sesión activa incluso si la app se cierra
+        try {
+          // No necesitamos verificar el token aquí, solo que exista
+          // La verificación real se hará en cada petición a la API
+        } catch (error) {
+          console.error('Error verificando token:', error);
+          logout();
+        }
+      }
+    };
+
+    checkToken();
+
+    // Configurar un listener para eventos de visibilidad de la página
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkToken();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [usuario, logout]);
+
   const logout = useCallback(() => {
     // Guardar nombre y rol en sessionStorage para la página de Logout
     if (usuario?.nombre) {

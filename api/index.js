@@ -39,6 +39,11 @@ app.use(cors({
       return callback(null, true);
     }
 
+    // Permitir solicitudes sin origen (móviles, apps nativas)
+    if (!origin) {
+      return callback(null, true);
+    }
+
     const allowedOrigins = [
       process.env.FRONTEND_URL || 'https://sistema-reportes-montemorelos.vercel.app'
     ];
