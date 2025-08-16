@@ -1,121 +1,132 @@
 # Sistema de Reportes - Presidencia Municipal de Montemorelos
 
-## 🚀 Instalación y Configuración
+## 🚀 Descripción
+Sistema web completo para gestión de reportes y quejas ciudadanas para la Presidencia Municipal de Montemorelos.
 
-### Prerrequisitos
-- Node.js (versión 16 o superior)
+## 📋 Características
+- ✅ Sistema de autenticación seguro
+- ✅ Gestión de reportes con imágenes
+- ✅ Panel de administración
+- ✅ Generador de códigos QR
+- ✅ Exportación de datos
+- ✅ Responsive design
+
+## 🛠️ Tecnologías Utilizadas
+- **Frontend**: React, TypeScript, Tailwind CSS, Framer Motion
+- **Backend**: Node.js, Express, MongoDB
+- **Despliegue**: Vercel
+
+## 📦 Instalación
+
+### Requisitos previos
+- Node.js 18+
+- MongoDB
 - npm o yarn
-- Conexión a internet (para MongoDB Atlas)
 
-### Instalación
+### Instalación local
 ```bash
+# Clonar el repositorio
+git clone [URL_DEL_REPOSITORIO]
+
 # Instalar dependencias
 npm install
-```
 
-### Configuración
-1. Verificar que el archivo `.env` tenga la configuración correcta
-2. La base de datos MongoDB Atlas ya está configurada
+# Configurar variables de entorno
+cp .env.local .env
 
-### Ejecutar el proyecto
+# Iniciar MongoDB
+mongod
 
-#### Opción 1: Desarrollo completo
-```bash
-# Terminal 1 - Servidor backend
+# Iniciar el servidor de desarrollo
+npm run dev
+
+# Iniciar el servidor backend
 npm run server
-
-# Terminal 2 - Frontend
-npm run dev
 ```
 
-#### Opción 2: Solo frontend (si el backend ya está corriendo)
+## 🚀 Despliegue
+
+### Desarrollo local
 ```bash
 npm run dev
+npm run server
 ```
 
-### Probar la conexión a la base de datos
+### Producción (Vercel)
+1. Configurar variables de entorno en Vercel:
+   - `MONGO_URI`
+   - `JWT_SECRET`
+   - `FRONTEND_URL`
+
+2. Desplegar:
 ```bash
-npm run test-db
+vercel --prod
 ```
 
-## 🌐 Despliegue en Vercel
+## 🔧 Configuración de Variables de Entorno
 
-Este proyecto está configurado para desplegarse en Vercel con las siguientes características:
+### Desarrollo (.env.local)
+```bash
+VITE_API_BASE_URL=http://localhost:5713/api
+MONGO_URI=mongodb://localhost:27017/reportes_montemorelos
+JWT_SECRET=tu-secreto-jwt
+NODE_ENV=development
+PORT=5713
+```
 
-### Backend Serverless
+### Producción (.env.production)
+```bash
+VITE_API_BASE_URL=https://sistema-reportes-montemorelos.vercel.app/api
+MONGO_URI=@mongo_uri
+JWT_SECRET=@jwt_secret
+NODE_ENV=production
+```
 
-El backend está configurado como funciones serverless en la carpeta `api/`. Esto permite que Vercel ejecute las rutas de la API bajo demanda sin necesidad de un servidor dedicado.
+## 📱 Uso
 
-### Variables de Entorno
+### Usuario
+1. Registrarse en la plataforma
+2. Iniciar sesión
+3. Crear reportes con imágenes
+4. Seguimiento de reportes
 
-Para el correcto funcionamiento en producción, asegúrate de configurar las siguientes variables de entorno en Vercel:
+### Administrador
+1. Acceso al panel de administración
+2. Gestión de reportes (estado, prioridad)
+3. Exportación de datos
+4. Gestión de usuarios
 
-- `MONGO_URI`: URL de conexión a tu base de datos MongoDB Atlas
-- `JWT_SECRET`: Clave secreta para firmar los Tokens de Autenticación (JWT)
-- `FRONTEND_URL`: URL del frontend en producción (para configuración de CORS)
+## 🔐 Credenciales de prueba
+- **Admin**: admin@montemorelos.gob.mx / admin123
+- **Usuario**: user@ejemplo.com / user123
 
-### Pasos para el despliegue
+## 📊 API Endpoints
 
-1. Conecta tu repositorio de GitHub a Vercel.
-2. Configura las variables de entorno en la sección "Environment Variables" de tu proyecto en Vercel.
-3. Asegúrate de que el directorio de salida esté configurado como `dist`.
-4. El comando de build debe ser `npm run build`.
-5. Despliega tu proyecto.
+### Reportes
+- `GET /api/reportes` - Obtener todos los reportes
+- `POST /api/reportes` - Crear nuevo reporte
+- `PATCH /api/reportes/:id` - Actualizar reporte
+- `DELETE /api/reportes/:id` - Eliminar reporte
 
-### Configuración de CORS
+### Usuarios
+- `POST /api/register` - Registrar usuario
+- `POST /api/login` - Iniciar sesión
+- `GET /api/perfil/:email` - Obtener perfil
+- `PUT /api/perfil/:email` - Actualizar perfil
 
-El backend está configurado para aceptar peticiones desde el dominio configurado en la variable de entorno `FRONTEND_URL`. Asegúrate de que esta variable esté configurada correctamente para evitar problemas de CORS.
+## 🐛 Solución de Problemas
 
-### Manejo de Archivos
+### Error de CORS
+Asegúrate de que las URLs estén correctamente configuradas en el archivo `server.js`
 
-Los archivos subidos se guardan en el directorio `uploads/` y se sirven estáticamente. Ten en cuenta que en Vercel, los archivos subidos no persisten entre despliegues, por lo que se recomienda utilizar un servicio de almacenamiento externo como AWS S3 o Google Cloud Storage para producción.
+### Error de conexión a MongoDB
+Verifica que MongoDB esté ejecutándose y la URI esté correcta
 
-## 🔧 Problemas Corregidos
+### Error de puerto en uso
+Cambia el puerto en el archivo `.env.local`
 
-### 1. Base de datos
-- ✅ Corregido método `actualizarReporte` para usar `_id` en lugar de `id`
-- ✅ Agregado método `eliminarReporte` faltante
-- ✅ Simplificado manejo de autenticación de usuarios
-- ✅ Corregido manejo de roles y perfiles
+## 📞 Soporte
+Para problemas o consultas, contactar al equipo de desarrollo.
 
-### 2. Servidor (server.js)
-- ✅ Corregido manejo de errores en endpoints de login y registro
-- ✅ Simplificado endpoint de perfil de usuario
-- ✅ Mejorado manejo de autenticación
-
-### 3. Frontend
-- ✅ Corregido manejo de roles en `App.tsx` y `PrivateRoute.tsx`
-- ✅ Agregado soporte para campo `rol` además de `roles`
-- ✅ Creado archivo de configuración centralizada de API
-
-### 4. Configuración
-- ✅ Corregidas variables de entorno en `.env`
-- ✅ Agregadas URLs completas para endpoints
-- ✅ Agregado script de prueba de base de datos
-
-## 🎯 Funcionalidades
-
-### Roles de usuario
-- **usuario/a**: Puede crear reportes
-- **administrador**: Acceso completo al sistema
-- **jefe de departamento**: Puede ver y gestionar reportes
-- **tecnico**: Puede ver y actualizar reportes
-
-### Características principales
-- Sistema de autenticación con roles
-- Creación y gestión de reportes
-- Dashboard con estadísticas
-- Generador de códigos QR
-- Subida de imágenes
-- Gestión de perfiles de usuario
-
-## 🌐 URLs del sistema
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:4000
-- Documentación API: Los endpoints están en `/api/*`
-
-## 📝 Notas importantes
-- El sistema usa MongoDB Atlas como base de datos
-- Las credenciales de la base de datos están en el archivo `.env`
-- Para producción, cambiar las URLs y configurar variables de entorno apropiadas
-- El sistema de autenticación actual es básico, se recomienda implementar JWT para producción
+## 📄 Licencia
+Este proyecto es propiedad de la Presidencia Municipal de Montemorelos.

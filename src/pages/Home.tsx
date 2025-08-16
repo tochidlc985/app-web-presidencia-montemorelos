@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FileText,
@@ -13,8 +13,9 @@ import {
   Loader2,
   Info,
   X,
-  Eye} from 'lucide-react';
-import { API_BASE_URL, API_ENDPOINTS } from '../services/apiConfig';
+  Eye
+} from 'lucide-react';
+import { API_ENDPOINTS } from '../services/apiConfig';
 import api from '../api';
 
 // Interfaz para el tipo de Reporte original desde la API
@@ -52,6 +53,7 @@ const KPI_TOOLTIPS: Record<string, string> = {
 };
 
 const Home: React.FC = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<Array<{
     label: string;
     value: string | number;
@@ -124,77 +126,123 @@ const Home: React.FC = () => {
         }
 
         const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-        const res = await api.get(API_ENDPOINTS.REPORTES, config);
 
-        if (!res.data) {
-          throw new Error('No se recibieron datos del servidor');
+        // Añadir un timeout para evitar que la petición se quede colgada
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos
+
+        try {
+          const res = await api.get(API_ENDPOINTS.REPORTES, {
+            ...config,
+            // signal no es compatible con la versión actual de axios
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!res.data) {
+            throw new Error('No se recibieron datos del servidor');
+          }
+
+          // Verificar si data es un array, si no lo es, intentar obtener la propiedad correcta
+          const data = res.data;
+          // Convertir explícitamente a any para acceder a propiedades que podrían no existir en el tipo
+          const dataAny = data as any;
+          const reportes: Reporte[] = Array.isArray(data) ? data : (dataAny?.reportes || dataAny?.data || []);
+
+          if (!Array.isArray(reportes)) {
+            throw new Error('Formato de datos de reportes incorrecto.');
+          }
+
+          const now = new Date();
+          const reportesMes = reportes.filter(r => {
+            const fecha = r.timestamp ? new Date(r.timestamp) : new Date(0);
+            return fecha.getMonth() === now.getMonth() && fecha.getFullYear() === now.getFullYear();
+          });
+          const pendientes = reportes.filter(r => r.status === 'Pendiente').length;
+          const criticos = reportes.filter(r => r.prioridad === 'Crítica').length;
+          const resueltosCount = reportes.filter(r => r.status === 'Resuelto').length;
+          setTotalReportes(reportes.length);
+          setResueltos(resueltosCount);
+          const departamentosSet = new Set<string>();
+          reportesMes.forEach(r => (Array.isArray(r.departamento) ? r.departamento : []).forEach((d: string) => departamentosSet.add(d)));
+
+          setStats([
+            { label: 'Reportes del Mes', value: reportesMes.length, icon: FileText, color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-50' },
+            { label: 'Reportes Pendientes', value: pendientes, icon: Clock, color: 'from-amber-500 to-orange-600', bgColor: 'bg-orange-50' },
+            { label: 'Reportes Críticos', value: criticos, icon: AlertTriangle, color: criticos > 0 ? 'from-red-600 to-red-700' : 'from-red-500 to-red-600', bgColor: 'bg-red-50' }, // Siempre crítico en rojo
+            { label: 'Departamentos Activos', value: departamentosSet.size, icon: Users, color: 'from-emerald-500 to-green-600', bgColor: 'bg-green-50' },
+          ]);
+
+          setRecentActivity(
+            reportes
+              .sort((a, b) => {
+                const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                return dateB - dateA; // Los más recientes primero
+              })
+              .slice(0, 15) // Limitar a las 15 actividades más recientes
+              .map((r) => ({
+                id: r._id,
+                dept: Array.isArray(r.departamento) ? r.departamento.join(', ') : (r.departamento || 'N/A'),
+                priority: r.prioridad,
+                issue: r.descripcion.length > 80 ? r.descripcion.substring(0, 80) + '...' : r.descripcion, // Breve descripción para la lista
+                time: r.timestamp ? new Date(r.timestamp).toLocaleString() : 'N/A',
+                status: r.status,
+                quienReporta: r.quienReporta || 'N/A',
+                tipoProblema: r.tipoProblema || 'N/A',
+                descripcion: r.descripcion, // Pasa la descripción completa para el modal
+                colorClass:
+                  r.status === 'Pendiente' ? 'bg-red-500 text-white' :
+                  r.status === 'En Proceso' ? 'bg-amber-500 text-white' :
+                  r.status === 'Resuelto' ? 'bg-emerald-500 text-white' :
+                  'bg-gray-500 text-white', // Default fallback
+              }))
+          );
+        } catch (err: any) {
+          clearTimeout(timeoutId);
+          console.error('Error detallado al cargar datos:', err);
+
+          // Mensajes de error más específicos según el tipo de error
+          let errorMessage = 'Error al cargar los datos';
+
+          if (err.name === 'AbortError') {
+            errorMessage = 'La solicitud tardó demasiado tiempo. Por favor, intenta de nuevo.';
+          } else if (err.response) {
+            // El servidor respondió con un código de error
+            if (err.response.status === 500) {
+              errorMessage = 'Error interno del servidor. Por favor, intenta más tarde.';
+            } else if (err.response.status === 401) {
+              errorMessage = 'No autorizado. Por favor, inicia sesión de nuevo.';
+            } else if (err.response.status === 404) {
+              errorMessage = 'Recurso no encontrado. Verifica la configuración.';
+            } else {
+              errorMessage = `Error del servidor: ${err.response.status}`;
+            }
+          } else if (err.request) {
+            // La solicitud se hizo pero no se recibió respuesta
+            errorMessage = 'No se pudo conectar al servidor. Verifica tu conexión a internet.';
+          } else {
+            // Error en la configuración de la solicitud
+            errorMessage = err.message || 'Error desconocido al cargar los datos';
+          }
+
+          setError(errorMessage);
+          // Reinicia los stats a su valor inicial en caso de error
+          setStats([
+            { label: 'Reportes del Mes', value: 'N/A', icon: FileText, color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-50' },
+            { label: 'Reportes Pendientes', value: 'N/A', icon: Clock, color: 'from-amber-500 to-orange-600', bgColor: 'bg-orange-50' },
+            { label: 'Reportes Críticos', value: 'N/A', icon: AlertTriangle, color: 'from-red-600 to-red-700', bgColor: 'bg-red-50' },
+            { label: 'Departamentos Activos', value: 'N/A', icon: Users, color: 'from-emerald-500 to-green-600', bgColor: 'bg-green-50' },
+          ]);
+          setRecentActivity([]);
         }
-
-        // Verificar si data es un array, si no lo es, intentar obtener la propiedad correcta
-        const data = res.data;
-        const reportes: Reporte[] = Array.isArray(data) ? data : (data.reportes || data.data || []);
-
-        if (!Array.isArray(reportes)) {
-          throw new Error('Formato de datos de reportes incorrecto.');
-        }
-
-        const now = new Date();
-        const reportesMes = reportes.filter(r => {
-          const fecha = r.timestamp ? new Date(r.timestamp) : new Date(0);
-          return fecha.getMonth() === now.getMonth() && fecha.getFullYear() === now.getFullYear();
-        });
-        const pendientes = reportes.filter(r => r.status === 'Pendiente').length;
-        const criticos = reportes.filter(r => r.prioridad === 'Crítica').length;
-        const resueltosCount = reportes.filter(r => r.status === 'Resuelto').length;
-        setTotalReportes(reportes.length);
-        setResueltos(resueltosCount);
-        const departamentosSet = new Set<string>();
-        reportesMes.forEach(r => (Array.isArray(r.departamento) ? r.departamento : []).forEach((d: string) => departamentosSet.add(d)));
-
-        setStats([
-          { label: 'Reportes del Mes', value: reportesMes.length, icon: FileText, color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-50' },
-          { label: 'Reportes Pendientes', value: pendientes, icon: Clock, color: 'from-amber-500 to-orange-600', bgColor: 'bg-orange-50' },
-          { label: 'Reportes Críticos', value: criticos, icon: AlertTriangle, color: criticos > 0 ? 'from-red-600 to-red-700' : 'from-red-500 to-red-600', bgColor: 'bg-red-50' }, // Siempre crítico en rojo
-          { label: 'Departamentos Activos', value: departamentosSet.size, icon: Users, color: 'from-emerald-500 to-green-600', bgColor: 'bg-green-50' },
-        ]);
-
-        setRecentActivity(
-          reportes
-            .sort((a, b) => {
-              const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-              const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-              return dateB - dateA; // Los más recientes primero
-            })
-            .slice(0, 15) // Limitar a las 15 actividades más recientes
-            .map((r) => ({
-              id: r._id,
-              dept: Array.isArray(r.departamento) ? r.departamento.join(', ') : (r.departamento || 'N/A'),
-              priority: r.prioridad,
-              issue: r.descripcion.length > 80 ? r.descripcion.substring(0, 80) + '...' : r.descripcion, // Breve descripción para la lista
-              time: r.timestamp ? new Date(r.timestamp).toLocaleString() : 'N/A',
-              status: r.status,
-              quienReporta: r.quienReporta || 'N/A',
-              tipoProblema: r.tipoProblema || 'N/A',
-              descripcion: r.descripcion, // Pasa la descripción completa para el modal
-              colorClass:
-                r.status === 'Pendiente' ? 'bg-red-500 text-white' :
-                r.status === 'En Proceso' ? 'bg-amber-500 text-white' :
-                r.status === 'Resuelto' ? 'bg-emerald-500 text-white' :
-                'bg-gray-500 text-white', // Default fallback
-            }))
-        );
+        setIsLoading(false);
       } catch (err: any) {
-        setError('Error al cargar los datos: ' + (err.message || 'Por favor, revisa tu conexión.'));
-        // Reinicia los stats a su valor inicial en caso de error
-        setStats([
-          { label: 'Reportes del Mes', value: 'N/A', icon: FileText, color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-50' },
-          { label: 'Reportes Pendientes', value: 'N/A', icon: Clock, color: 'from-amber-500 to-orange-600', bgColor: 'bg-orange-50' },
-          { label: 'Reportes Críticos', value: 'N/A', icon: AlertTriangle, color: 'from-red-600 to-red-700', bgColor: 'bg-red-50' },
-          { label: 'Departamentos Activos', value: 'N/A', icon: Users, color: 'from-emerald-500 to-green-600', bgColor: 'bg-green-50' },
-        ]);
-        setRecentActivity([]);
+        // Este bloque catch maneja errores del primer try (autenticación)
+        console.error('Error de autenticación:', err);
+        setError(err.message || 'Error de autenticación');
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
     fetchData();
   }, []); // El efecto se ejecuta solo una vez al montar
@@ -210,26 +258,17 @@ const Home: React.FC = () => {
   return (
     // CAMBIO 1: Fondo general más sofisticado con ondas SVG animadas
     <div className="relative min-h-screen bg-gradient-to-br from-blue-50 via-indigo-100 to-blue-200 font-inter antialiased pt-24 pb-16 overflow-hidden">
-      {/* Patrón de ondas SVG animadas en el fondo */}
+      {/* Patrón de ondas SVG estático en el fondo */}
       <div className="absolute inset-x-0 bottom-0 h-96 z-0 overflow-hidden opacity-50">
         <svg className="w-full h-full" viewBox="0 0 1440 320" preserveAspectRatio="none">
-          <motion.path
+          <path
             d="M0,192L80,186.7C160,181,320,171,480,186.7C640,203,800,245,960,240C1120,235,1280,181,1360,154.7L1440,128L1440,320L1360,320C1280,320,1120,320,960,320C800,320,640,320,480,320C320,320,160,320,80,320L0,320Z"
             fill="url(#gradientWaves)"
-            initial={{ d: "M0,192L80,186.7C160,181,320,171,480,186.7C640,203,800,245,960,240C1120,235,1280,181,1360,154.7L1440,128L1440,320L1360,320C1280,320,1120,320,960,320C800,320,640,320,480,320C320,320,160,320,80,320L0,320Z" }}
-            animate={{
-              d: [
-                "M0,192L80,186.7C160,181,320,171,480,186.7C640,203,800,245,960,240C1120,235,1280,181,1360,154.7L1440,128L1440,320L1360,320C1280,320,1120,320,960,320C800,320,640,320,480,320C320,320,160,320,80,320L0,320Z",
-                "M0,160L80,149.3C160,139,320,117,480,138.7C640,160,800,224,960,218.7C1120,213,1280,139,1360,106.7L1440,75L1440,320L1360,320C1280,320,1120,320,960,320C800,320,640,320,480,320C320,320,160,320,80,320L0,320Z",
-                "M0,192L80,186.7C160,181,320,171,480,186.7C640,203,800,245,960,240C1120,235,1280,181,1360,154.7L1440,128L1440,320L1360,320C1280,320,1120,320,960,320C800,320,640,320,480,320C320,320,160,320,80,320L0,320Z"
-              ]
-            }}
-            transition={{ duration: 30, repeat: Infinity, ease: "easeInOut" }}
           />
           <defs>
             <linearGradient id="gradientWaves" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" style={{stopColor: "rgb(150, 190, 255)", stopOpacity: 0.5}} />
-              <stop offset="100%" style={{stopColor: "rgb(190, 220, 255)", stopOpacity: 0.2}} />
+              <stop offset="0%" style={{ stopColor: "rgb(150, 190, 255)", stopOpacity: 0.5 }} />
+              <stop offset="100%" style={{ stopColor: "rgb(190, 220, 255)", stopOpacity: 0.2 }} />
             </linearGradient>
           </defs>
         </svg>
@@ -238,16 +277,13 @@ const Home: React.FC = () => {
 
       <div className="relative max-w-7xl mx-auto space-y-16 px-4 sm:px-6 lg:px-8 z-10">
         {/* Encabezado Principal y Logo */}
-        <motion.div
+        <motion.div // Agregado motion.div para la animación
           initial={{ opacity: 0, y: -50 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
+          transition={{ duration: 0.8 }}
           className="text-center bg-white rounded-5xl p-8 sm:p-12 shadow-3xl border border-gray-100 backdrop-blur-md relative overflow-hidden" // Aumentado padding y rounded
         >
           <motion.div
-            initial={{ scale: 0.5, rotate: -30 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: "spring", stiffness: 200, damping: 20, delay: 0.3 }}
             className="flex justify-center mb-8 z-10 relative"
           >
             <img
@@ -255,7 +291,7 @@ const Home: React.FC = () => {
               alt="Logo Montemorelos"
               className="h-36 w-36 sm:h-44 sm:w-44 object-contain rounded-full shadow-2xl p-1
               bg-gradient-to-tr from-yellow-400 via-orange-500 to-red-500
-              transform hover:scale-110 transition-transform duration-300 ring-4 ring-yellow-300 ring-opacity-70
+              ring-4 ring-yellow-300 ring-opacity-70
               border-4 border-white" // Borde más grueso
             />
           </motion.div>
@@ -265,12 +301,9 @@ const Home: React.FC = () => {
           <p className="text-xl sm:text-2xl text-gray-700 max-w-4xl mx-auto font-medium leading-relaxed sm:leading-loose drop-shadow-sm">
             Optimiza y coordina los procesos del <span className="text-blue-800 font-semibold">Departamento de Sistemas</span> de la Presidencia Municipal de Montemorelos.
           </p>
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: '150px' }} // Divisor más largo
-            transition={{ delay: 0.7, duration: 0.7 }}
-            className="h-3 mx-auto mt-8 rounded-full bg-gradient-to-r from-blue-400 via-green-300 to-yellow-400 shadow-2xl" // Mayor altura y sombra
-          ></motion.div>
+          <div
+            className="h-3 mx-auto mt-8 rounded-full bg-gradient-to-r from-blue-400 via-green-300 to-yellow-400 shadow-2xl w-150px" // Mayor altura y sombra
+          ></div>
         </motion.div>
 
         {/* Sección de Indicadores Clave (KPIs) */}
@@ -442,13 +475,21 @@ const Home: React.FC = () => {
                     <AlertTriangle className="h-14 w-14 text-red-500 mx-auto mb-6" />
                     <p className="text-red-700 text-3xl font-bold mb-4">{error}</p>
                     <p className="text-red-500 text-lg mt-3">Puede que haya un problema con la conexión o el servidor.</p>
-                    <button
+                    <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+                      <button
                         onClick={() => window.location.reload()}
-                        className="mt-8 bg-red-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-red-700 transition shadow-lg flex items-center gap-3 mx-auto text-xl transform hover:scale-105"
+                        className="bg-red-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-red-700 transition shadow-lg flex items-center gap-3 mx-auto text-xl transform hover:scale-105"
                       >
-                        <Loader2 className="h-7 w-7"/>
+                        <Loader2 className="h-7 w-7" />
                         Reintentar
                       </button>
+                      <button
+                        onClick={() => navigate('/login')}
+                        className="bg-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg flex items-center gap-3 mx-auto text-xl transform hover:scale-105"
+                      >
+                        Ir a Login
+                      </button>
+                    </div>
                   </div>
                 )}
                 {!isLoading && !error && actividadFiltrada.length === 0 && (
@@ -474,7 +515,7 @@ const Home: React.FC = () => {
                     <div className="flex-1 space-y-3 mb-5 md:mb-0">
                       <div className="flex items-center space-x-4 flex-wrap gap-y-3"> {/* Aumentado gap-y */}
                         <span className="font-extrabold text-lg text-gray-800 p-2 px-4 bg-blue-100 text-blue-800 rounded-xl shadow-inner transition-colors">
-                            {item.dept}
+                          {item.dept}
                         </span>
                         <span className={`px-4 py-2 rounded-xl text-sm font-bold shadow-md transition-colors ${
                           item.priority === 'Crítica' ? 'bg-red-600 text-white' :
@@ -488,8 +529,8 @@ const Home: React.FC = () => {
                       <p className="text-xl sm:text-2xl font-semibold text-gray-900 leading-snug tracking-tight mt-2.5">{item.issue}</p> {/* Más negrita y espaciado */}
                       <div className="text-sm sm:text-base text-gray-600 space-y-2"> {/* Espaciado en detalle */}
                         <div className="flex flex-wrap items-center gap-x-3">
-                            <span className="font-bold text-gray-700">ID del Reporte:</span>
-                            <span className="text-blue-600 font-mono text-xs sm:text-sm bg-blue-50 p-1 px-2.5 rounded shadow-sm cursor-text select-all">{item.id}</span> {/* ID completo y copiables */}
+                          <span className="font-bold text-gray-700">ID del Reporte:</span>
+                          <span className="text-blue-600 font-mono text-xs sm:text-sm bg-blue-50 p-1 px-2.5 rounded shadow-sm cursor-text select-all">{item.id}</span> {/* ID completo y copiables */}
                         </div>
                         <p><span className="font-bold text-gray-700">Reportado por:</span> {item.quienReporta || 'Desconocido'}</p>
                         <p><span className="font-bold text-gray-700">Tipo de Problema:</span> {item.tipoProblema || 'General'}</p>

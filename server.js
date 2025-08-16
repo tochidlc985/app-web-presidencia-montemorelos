@@ -12,10 +12,18 @@ import { db } from './database.js';
 // Cargar variables de entorno
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.resolve(__dirname, '.env') });
+
+// Determinar archivo de entorno según el entorno
+const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local';
+dotenv.config({ path: path.resolve(__dirname, envFile) });
+
+// Para Vercel, usar variables de entorno directamente
+if (process.env.VERCEL) {
+  console.log('Ejecutando en Vercel con variables de entorno configuradas');
+}
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = 4000; // Set port directly for testing
 
 // Middleware globales
 app.use(cors({
@@ -50,7 +58,7 @@ app.use(bodyParser.json({ limit: '20mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '20mb' }));
 
 // Servir archivos estáticos desde la carpeta public
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Middleware para loguear solicitudes
 app.use((req, res, next) => {
@@ -286,11 +294,11 @@ app.get('/api/estadisticas', async (req, res) => {
 
 // Ruta principal - servir el archivo index.html del frontend
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
+  res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
 // Servir archivos estáticos del frontend
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, 'public')));
 app.use('/src', express.static(path.join(__dirname, '../src')));
 app.use('/node_modules', express.static(path.join(__dirname, '../node_modules')));
 

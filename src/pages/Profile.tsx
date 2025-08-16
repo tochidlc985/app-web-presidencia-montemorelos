@@ -126,10 +126,6 @@ const Profile: React.FC = (): JSX.Element => {
   // Autoguardado: Cuando `form` cambia y estamos en modo edición, y no estamos arrastrando
   const saveUserDataLocally = useCallback(async (data: Usuario) => {
     try {
-      // Si la foto cambió y el modo edición, guardar las propiedades de la foto.
-      if (setUsuario) { // Si el contexto proporciona `setUsuario`
-        setUsuario(data);
-      }
       // Guardar en localStorage para persistencia básica
       localStorage.setItem('usuario', JSON.stringify(data));
 
@@ -159,14 +155,16 @@ const Profile: React.FC = (): JSX.Element => {
       console.error('Error al guardar datos en tiempo real:', error);
       // No mostramos un toast aquí para no interrumpir la experiencia del usuario
     }
-  }, [setUsuario, edit, updateUserProfile]); // Incluir todas las dependencias necesarias
+  }, [edit, updateUserProfile]); // Incluir todas las dependencias necesarias
 
   // Efecto para la carga inicial de datos del usuario y configuración del temporizador
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
+    let navigated = false;
 
     const loadUserData = async () => {
       let initialUserData: Usuario | null = usuario || null;
+      const currentPath = window.location.pathname;
 
       // Si el usuario no está en el contexto (p.ej., refresco de página), búscalo en localStorage.
       if (!initialUserData) {
@@ -177,10 +175,11 @@ const Profile: React.FC = (): JSX.Element => {
           } catch (e) {
             console.error("Error parsing user data from localStorage:", e);
             localStorage.removeItem('usuario'); // Corrupted data
-            // Solo navegar si realmente no estamos logueados para evitar bucles si hay token pero datos malos
-            if (!isLoggedIn()) { 
-                showThemedToast('Sesión expirada o datos corruptos. Inicia sesión de nuevo.', 'error');
-                navigate('/login', { replace: true });
+            if (!isLoggedIn() && currentPath !== '/login' && !navigated) {
+              navigated = true;
+              showThemedToast('Sesión expirada o datos corruptos. Inicia sesión de nuevo.', 'error');
+              navigate('/login', { replace: true });
+              return;
             }
             return;
           }
@@ -188,12 +187,13 @@ const Profile: React.FC = (): JSX.Element => {
       }
 
       // Si no hay datos de usuario después de todo, y no está loggeado, redirigir
-      if (!initialUserData && !isLoggedIn()) {
+      if (!initialUserData && !isLoggedIn() && currentPath !== '/login' && !navigated) {
+        navigated = true;
         showThemedToast('No has iniciado sesión.', 'error');
         navigate('/login', { replace: true });
         return;
       }
-      
+
       // Aplicar datos al estado del formulario
       if (initialUserData) {
         setForm(initialUserData);
@@ -210,7 +210,6 @@ const Profile: React.FC = (): JSX.Element => {
         }
       } else {
         // Fallback si isLoggedIn es true pero no se encontraron datos de usuario.
-        // Podría indicar un token válido pero sin información de perfil en el backend/localStorage.
         showThemedToast('Datos de usuario no disponibles. Intenta recargar o iniciar sesión de nuevo.', 'error');
       }
     };
@@ -220,7 +219,6 @@ const Profile: React.FC = (): JSX.Element => {
     // Limpieza al desmontar o re-ejecutar el efecto
     return () => {
       if (intervalId) clearInterval(intervalId);
-      // Remover event listeners globales de arrastre si se agregaron aquí
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
@@ -466,7 +464,9 @@ const Profile: React.FC = (): JSX.Element => {
       const updatedUser = await updateUserProfile(payload);
 
       setEdit(false);
-      if (setUsuario) {
+      // Actualizar el contexto de autenticación después de que el renderizado haya finalizado
+      setTimeout(() => {
+        if (setUsuario) {
           // Asegurarse de que el rol se mantenga correctamente en el contexto
           const rolActual = usuario?.rol;
           setUsuario({
@@ -478,7 +478,8 @@ const Profile: React.FC = (): JSX.Element => {
             fotoPositionX: position.x,
             fotoPositionY: position.y,
           }); // Actualiza contexto de autenticación
-      }
+        }
+      }, 0);
       // Guardar en localStorage con todas las propiedades
       localStorage.setItem('usuario', JSON.stringify({
         ...updatedUser,

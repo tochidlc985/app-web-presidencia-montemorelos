@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import toast from 'react-hot-toast'; // Mantenemos el toast, pero la lógica será más precisa
 import { useAuth } from '../context/AuthContext'; // Importamos el hook useAuth
@@ -14,7 +14,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
   // Evitar problemas de hidratación en SSR
   const [isClient, setIsClient] = React.useState(false);
-  const [isAuthorized, setIsAuthorized] = React.useState(false);
+  const [isAuthorized, setIsAuthorized] = React.useState<boolean | null>(null);
 
   React.useEffect(() => {
     setIsClient(true);
@@ -22,7 +22,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
   React.useEffect(() => {
     // Verificar autorización solo en el cliente
-    if (isClient && isLoggedIn()) {
+    if (isClient) {
+      if (!isLoggedIn()) {
+        setIsAuthorized(false);
+        return;
+      }
+
       // Verifica el rol solo si hay un usuario logueado en el contexto
       const currentUserRoles = Array.isArray(usuario?.roles)
         ? usuario.roles.map(role => role.toLowerCase())
@@ -40,12 +45,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       }
 
       setIsAuthorized(hasValidRole);
-    } else if (isClient) {
-      setIsAuthorized(false);
     }
   }, [isClient, isLoggedIn, usuario, logout]);
 
-  if (!isClient) {
+  if (!isClient || isAuthorized === null) {
     return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
   }
 
