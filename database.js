@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Cargar variables de entorno para Vercel
-dotenv.config({ path: path.resolve(__dirname, '.env') });
+dotenv.config();
 
 // Verificar variables de entorno para Vercel
 if (!process.env.MONGO_URI) {

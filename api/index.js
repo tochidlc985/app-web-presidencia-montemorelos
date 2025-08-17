@@ -7,6 +7,10 @@ import fs from 'fs';
 import jwt from 'jsonwebtoken';
 import { fileURLToPath } from 'url';
 import { db } from '../database.js';
+import dotenv from 'dotenv';
+
+// Cargar variables de entorno para Vercel
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,7 +25,7 @@ app.use(cors({
     const allowedOrigins = [
       'http://localhost:5713',
       'http://localhost:4000',
-      'https://sistema-reportes-montemorelos.vercel.app'
+      process.env.FRONTEND_URL || 'https://sistema-reportes-montemorelos.vercel.app'
     ];
     
     if (allowedOrigins.indexOf(origin) !== -1) {
@@ -136,6 +140,20 @@ app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
     const files = req.files || [];
     const reporte = req.body.data ? JSON.parse(req.body.data) : req.body;
     
+    // Validación robusta
+    if (!reporte.email || !reporte.departamento || !reporte.descripcion || !reporte.tipoProblema || !reporte.quienReporta) {
+      return res.status(400).json({ message: 'Faltan campos requeridos en el reporte' });
+    }
+    if (!Array.isArray(reporte.departamento) || reporte.departamento.length === 0) {
+      return res.status(400).json({ message: 'El campo departamento debe ser un arreglo con al menos un valor' });
+    }
+    if (typeof reporte.email !== 'string' || !reporte.email.includes('@')) {
+      return res.status(400).json({ message: 'Email inválido' });
+    }
+    if (files.some(f => f.size > 10 * 1024 * 1024)) {
+      return res.status(400).json({ message: 'Algún archivo excede el tamaño máximo de 10MB' });
+    }
+    
     reporte.imagenes = files.map(f => f.filename);
     const ok = await db.guardarReporte(reporte);
     
@@ -145,6 +163,7 @@ app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
       res.status(500).json({ message: 'Error al guardar el reporte' });
     }
   } catch (error) {
+    console.error('Error en POST /api/reportes:', error);
     res.status(500).json({ message: 'Error en el servidor', error: error.message });
   }
 });
@@ -155,6 +174,48 @@ app.get('/api/reportes', async (req, res) => {
     res.json(reportes);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener reportes', error: error.message });
+  }
+});
+
+// Actualizar estado o prioridad del reporte
+app.patch('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const update = req.body;
+    const ok = await db.actualizarReporte(id, update);
+    if (ok) {
+      res.json({ message: 'Reporte actualizado correctamente' });
+    } else {
+      res.status(404).json({ message: 'Reporte no encontrado' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Error al actualizar reporte', error: error.message });
+  }
+});
+
+// Eliminar reporte (solo admin) y borrar imágenes asociadas
+app.delete('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Obtener reporte antes de eliminar
+    const reporte = await db.obtenerReportePorId(id);
+    const ok = await db.eliminarReporte(id);
+
+    if (ok) {
+      // Eliminar archivos asociados
+      if (reporte && reporte.imagenes) {
+        reporte.imagenes.forEach(img => {
+          const filePath = path.join(uploadDir, img);
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        });
+      }
+      res.json({ message: 'Reporte eliminado correctamente' });
+    } else {
+      res.status(404).json({ message: 'Reporte no encontrado' });
+    }
+  } catch (error) {
+    console.error('Error en DELETE /api/reportes/:id:', error);
+    res.status(500).json({ message: 'Error en el servidor', error: error.message });
   }
 });
 
@@ -175,6 +236,20 @@ app.get('/api/perfil/:email', async (req, res) => {
     res.json(perfil);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener perfil', error: error.message });
+  }
+});
+
+// Actualizar perfil de usuario
+app.put('/api/perfil/:email', async (req, res) => {
+  try {
+    const ok = await db.actualizarPerfilUsuario(req.params.email, req.body);
+    if (ok) {
+      res.json({ message: 'Perfil actualizado correctamente' });
+    } else {
+      res.status(404).json({ message: 'Perfil no encontrado' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Error al actualizar perfil', error: error.message });
   }
 });
 
