@@ -256,8 +256,8 @@ function requireRole(role) {
   };
 }
 
-// Rutas API - SIN prefijo /api ya que Vercel ya lo maneja
-app.post('/login', async (req, res) => {
+// Rutas API - CON prefijo /api para que coincidan con la configuración del frontend
+app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -281,7 +281,7 @@ app.post('/login', async (req, res) => {
   }
 });
 
-app.post('/register', async (req, res) => {
+app.post('/api/register', async (req, res) => {
   try {
     const { nombre, email, password, rol } = req.body;
     if (!nombre || !email || !password || !rol) {
@@ -300,13 +300,13 @@ app.post('/register', async (req, res) => {
     if (error.message === 'El usuario ya existe') {
       res.status(409).json({ message: 'El usuario ya existe' });
     } else {
-      console.error('Error en POST /register:', error);
+      console.error('Error en POST /api/register:', error);
       res.status(500).json({ message: 'Error al registrar usuario', error: error.message });
     }
   }
 });
 
-app.get('/perfil/:email', async (req, res) => {
+app.get('/api/perfil/:email', async (req, res) => {
   try {
     const perfil = await buscarPerfilPorEmail(req.params.email);
     if (!perfil) return res.status(404).json({ message: 'Perfil no encontrado' });
@@ -316,7 +316,7 @@ app.get('/perfil/:email', async (req, res) => {
   }
 });
 
-app.put('/perfil/:email', async (req, res) => {
+app.put('/api/perfil/:email', async (req, res) => {
   try {
     const ok = await actualizarPerfilUsuario(req.params.email, req.body);
     if (ok) {
@@ -329,7 +329,7 @@ app.put('/perfil/:email', async (req, res) => {
   }
 });
 
-app.get('/estadisticas', async (req, res) => {
+app.get('/api/estadisticas', async (req, res) => {
   try {
     const stats = await obtenerEstadisticas();
     res.json(stats);
@@ -338,7 +338,7 @@ app.get('/estadisticas', async (req, res) => {
   }
 });
 
-app.post('/reportes', upload.array('imagenes', 10), async (req, res) => {
+app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
   try {
     const files = req.files || [];
     const reporte = req.body.data ? JSON.parse(req.body.data) : req.body;
@@ -366,12 +366,12 @@ app.post('/reportes', upload.array('imagenes', 10), async (req, res) => {
       res.status(500).json({ message: 'Error al guardar el reporte' });
     }
   } catch (error) {
-    console.error('Error en POST /reportes:', error);
+    console.error('Error en POST /api/reportes:', error);
     res.status(500).json({ message: 'Error en el servidor', error: error.message });
   }
 });
 
-app.get('/reportes', async (req, res) => {
+app.get('/api/reportes', async (req, res) => {
   try {
     const reportes = await obtenerReportes();
     res.json(reportes);
@@ -380,7 +380,7 @@ app.get('/reportes', async (req, res) => {
   }
 });
 
-app.patch('/reportes/:id', requireRole('administrador'), async (req, res) => {
+app.patch('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
   try {
     const { id } = req.params;
     const update = req.body;
@@ -396,7 +396,7 @@ app.patch('/reportes/:id', requireRole('administrador'), async (req, res) => {
   }
 });
 
-app.delete('/reportes/:id', requireRole('administrador'), async (req, res) => {
+app.delete('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
   try {
     const { id } = req.params;
     const reporte = await obtenerReportePorId(id);
@@ -415,21 +415,14 @@ app.delete('/reportes/:id', requireRole('administrador'), async (req, res) => {
       res.status(404).json({ message: 'Reporte no encontrado' });
     }
   } catch (error) {
-    console.error('Error en DELETE /reportes/:id:', error);
+    console.error('Error en DELETE /api/reportes/:id:', error);
     res.status(500).json({ message: 'Error en el servidor', error: error.message });
   }
 });
 
-// Ruta para servir archivos de uploads
-app.get('/uploads/:filename', (req, res) => {
-  const filename = req.params.filename;
-  const filePath = path.join(uploadDir, filename);
-
-  if (fs.existsSync(filePath)) {
-    res.sendFile(filePath);
-  } else {
-    res.status(404).json({ message: 'Archivo no encontrado' });
-  }
+// Ruta para verificar que el servidor está funcionando
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'OK', message: 'API funcionando correctamente' });
 });
 
 // Manejo de errores
