@@ -1,9 +1,9 @@
 import axios from 'axios';
-import { ADJUSTED_API_BASE_URL } from './services/apiConfig';
+import { ADJUSTED_API_BASE_URL, API_BASE_URL } from './services/apiConfig';
 
 // Usar URL ajustada para todas las solicitudes
 const api = axios.create({
-  baseURL: ADJUSTED_API_BASE_URL,
+  baseURL: ADJUSTED_API_BASE_URL || API_BASE_URL,
 });
 
 api.interceptors.request.use(

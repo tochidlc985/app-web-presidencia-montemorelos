@@ -9,8 +9,13 @@ export const ABSOLUTE_API_BASE_URL = isProduction
   ? (typeof window !== 'undefined' ? `${window.location.origin}/api` : '')
   : 'http://localhost:4000';
 
+// URL para Vercel - asegura que las peticiones API se dirijan correctamente
+export const VERCEL_API_BASE_URL = isProduction
+  ? '' // En Vercel, las rutas /api se manejan automáticamente
+  : 'http://localhost:4000';
+
 // URL ajustada para evitar problemas con rutas duplicadas
-export const ADJUSTED_API_BASE_URL = API_BASE_URL;
+export const ADJUSTED_API_BASE_URL = isProduction ? '' : API_BASE_URL;
 
 export const API_ENDPOINTS = {
   LOGIN: '/api/login',

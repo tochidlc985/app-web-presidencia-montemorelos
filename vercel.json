@@ -1,25 +1,22 @@
 {
   "version": 2,
-  "functions": {
-    "api/api.js": {
-      "maxDuration": 30
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
     }
-  },
+  ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/api.js"
-    },
-    {
-      "src": "/uploads/(.*)",
-      "dest": "/api/api.js",
-      "headers": {
-        "Cache-Control": "public, max-age=31536000, immutable"
-      }
-    },
-    {
       "src": "/(.*)",
-      "dest": "/dist/$1"
+      "dest": "server.js"
     }
   ],
   "env": {

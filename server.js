@@ -17,11 +17,15 @@ const __dirname = path.dirname(__filename);
 const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local';
 dotenv.config({ path: path.resolve(__dirname, envFile) });
 
-// Configuración para entorno local
-console.log('Ejecutando en entorno local');
+// Configuración para entorno
+if (process.env.NODE_ENV === 'production') {
+  console.log('Ejecutando en entorno de producción (Vercel)');
+} else {
+  console.log('Ejecutando en entorno local');
+}
 
 const app = express();
-const PORT = 4000; // Set port directly for testing
+const PORT = process.env.PORT || 4000; // Usar puerto de Vercel o 4000 para desarrollo local
 
 // Middleware globales
 app.use(cors({
@@ -290,13 +294,25 @@ app.get('/api/estadisticas', async (req, res) => {
 
 // Ruta principal - servir el archivo index.html del frontend
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/index.html'));
+  if (process.env.NODE_ENV === 'production') {
+    // En Vercel, servimos el archivo build/index.html
+    res.sendFile(path.join(__dirname, 'dist/index.html'));
+  } else {
+    // En desarrollo, servimos el archivo public/index.html
+    res.sendFile(path.join(__dirname, 'public/index.html'));
+  }
 });
 
 // Servir archivos estáticos del frontend
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/src', express.static(path.join(__dirname, '../src')));
-app.use('/node_modules', express.static(path.join(__dirname, '../node_modules')));
+if (process.env.NODE_ENV === 'production') {
+  // En producción, servimos los archivos estáticos desde la carpeta dist
+  app.use(express.static(path.join(__dirname, 'dist')));
+} else {
+  // En desarrollo, servimos los archivos estáticos desde la carpeta public
+  app.use(express.static(path.join(__dirname, 'public')));
+  app.use('/src', express.static(path.join(__dirname, '../src')));
+  app.use('/node_modules', express.static(path.join(__dirname, '../node_modules')));
+}
 
 // Manejo de errores 404
 app.use((req, res) => {
