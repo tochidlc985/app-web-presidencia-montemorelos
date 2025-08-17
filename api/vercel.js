@@ -256,8 +256,89 @@ function requireRole(role) {
   };
 }
 
-// Rutas API
-app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
+// Rutas API - SIN prefijo /api ya que Vercel ya lo maneja
+app.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email y contraseña requeridos' });
+    }
+
+    const usuario = await autenticarUsuario({ email, password });
+    if (!usuario) {
+      return res.status(401).json({ message: 'Credenciales inválidas' });
+    }
+
+    const token = jwt.sign(
+      { email: usuario.email, rol: usuario.rol },
+      process.env.JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+
+    res.json({ usuario, token });
+  } catch (error) {
+    res.status(500).json({ message: 'Error al iniciar sesión', error: error.message });
+  }
+});
+
+app.post('/register', async (req, res) => {
+  try {
+    const { nombre, email, password, rol } = req.body;
+    if (!nombre || !email || !password || !rol) {
+      return res.status(400).json({ message: 'Faltan campos requeridos' });
+    }
+    if (typeof email !== 'string' || !email.includes('@')) {
+      return res.status(400).json({ message: 'Email inválido' });
+    }
+    if (typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ message: 'La contraseña debe tener al menos 8 caracteres' });
+    }
+
+    const usuario = await registrarUsuario({ nombre, email, password, rol });
+    res.status(201).json({ message: 'Usuario registrado correctamente', usuario });
+  } catch (error) {
+    if (error.message === 'El usuario ya existe') {
+      res.status(409).json({ message: 'El usuario ya existe' });
+    } else {
+      console.error('Error en POST /register:', error);
+      res.status(500).json({ message: 'Error al registrar usuario', error: error.message });
+    }
+  }
+});
+
+app.get('/perfil/:email', async (req, res) => {
+  try {
+    const perfil = await buscarPerfilPorEmail(req.params.email);
+    if (!perfil) return res.status(404).json({ message: 'Perfil no encontrado' });
+    res.json(perfil);
+  } catch (error) {
+    res.status(500).json({ message: 'Error al obtener perfil', error: error.message });
+  }
+});
+
+app.put('/perfil/:email', async (req, res) => {
+  try {
+    const ok = await actualizarPerfilUsuario(req.params.email, req.body);
+    if (ok) {
+      res.json({ message: 'Perfil actualizado correctamente' });
+    } else {
+      res.status(404).json({ message: 'Perfil no encontrado' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Error al actualizar perfil', error: error.message });
+  }
+});
+
+app.get('/estadisticas', async (req, res) => {
+  try {
+    const stats = await obtenerEstadisticas();
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ message: 'Error al obtener estadísticas', error: error.message });
+  }
+});
+
+app.post('/reportes', upload.array('imagenes', 10), async (req, res) => {
   try {
     const files = req.files || [];
     const reporte = req.body.data ? JSON.parse(req.body.data) : req.body;
@@ -285,12 +366,12 @@ app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
       res.status(500).json({ message: 'Error al guardar el reporte' });
     }
   } catch (error) {
-    console.error('Error en POST /api/reportes:', error);
+    console.error('Error en POST /reportes:', error);
     res.status(500).json({ message: 'Error en el servidor', error: error.message });
   }
 });
 
-app.get('/api/reportes', async (req, res) => {
+app.get('/reportes', async (req, res) => {
   try {
     const reportes = await obtenerReportes();
     res.json(reportes);
@@ -299,7 +380,7 @@ app.get('/api/reportes', async (req, res) => {
   }
 });
 
-app.patch('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
+app.patch('/reportes/:id', requireRole('administrador'), async (req, res) => {
   try {
     const { id } = req.params;
     const update = req.body;
@@ -315,7 +396,7 @@ app.patch('/api/reportes/:id', requireRole('administrador'), async (req, res) =>
   }
 });
 
-app.delete('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
+app.delete('/reportes/:id', requireRole('administrador'), async (req, res) => {
   try {
     const { id } = req.params;
     const reporte = await obtenerReportePorId(id);
@@ -334,95 +415,16 @@ app.delete('/api/reportes/:id', requireRole('administrador'), async (req, res) =
       res.status(404).json({ message: 'Reporte no encontrado' });
     }
   } catch (error) {
-    console.error('Error en DELETE /api/reportes/:id:', error);
+    console.error('Error en DELETE /reportes/:id:', error);
     res.status(500).json({ message: 'Error en el servidor', error: error.message });
   }
 });
 
-app.post('/api/register', async (req, res) => {
-  try {
-    const { nombre, email, password, rol } = req.body;
-    if (!nombre || !email || !password || !rol) {
-      return res.status(400).json({ message: 'Faltan campos requeridos' });
-    }
-    if (typeof email !== 'string' || !email.includes('@')) {
-      return res.status(400).json({ message: 'Email inválido' });
-    }
-    if (typeof password !== 'string' || password.length < 8) {
-      return res.status(400).json({ message: 'La contraseña debe tener al menos 8 caracteres' });
-    }
+// Ruta para servir archivos de uploads
+app.get('/uploads/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(uploadDir, filename);
 
-    const usuario = await registrarUsuario({ nombre, email, password, rol });
-    res.status(201).json({ message: 'Usuario registrado correctamente', usuario });
-  } catch (error) {
-    if (error.message === 'El usuario ya existe') {
-      res.status(409).json({ message: 'El usuario ya existe' });
-    } else {
-      console.error('Error en POST /api/register:', error);
-      res.status(500).json({ message: 'Error al registrar usuario', error: error.message });
-    }
-  }
-});
-
-app.post('/api/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Email y contraseña requeridos' });
-    }
-
-    const usuario = await autenticarUsuario({ email, password });
-    if (!usuario) {
-      return res.status(401).json({ message: 'Credenciales inválidas' });
-    }
-
-    const token = jwt.sign(
-      { email: usuario.email, rol: usuario.rol },
-      process.env.JWT_SECRET,
-      { expiresIn: '8h' }
-    );
-
-    res.json({ usuario, token });
-  } catch (error) {
-    res.status(500).json({ message: 'Error al iniciar sesión', error: error.message });
-  }
-});
-
-app.get('/api/perfil/:email', async (req, res) => {
-  try {
-    const perfil = await buscarPerfilPorEmail(req.params.email);
-    if (!perfil) return res.status(404).json({ message: 'Perfil no encontrado' });
-    res.json(perfil);
-  } catch (error) {
-    res.status(500).json({ message: 'Error al obtener perfil', error: error.message });
-  }
-});
-
-app.put('/api/perfil/:email', async (req, res) => {
-  try {
-    const ok = await actualizarPerfilUsuario(req.params.email, req.body);
-    if (ok) {
-      res.json({ message: 'Perfil actualizado correctamente' });
-    } else {
-      res.status(404).json({ message: 'Perfil no encontrado' });
-    }
-  } catch (error) {
-    res.status(500).json({ message: 'Error al actualizar perfil', error: error.message });
-  }
-});
-
-app.get('/api/estadisticas', async (req, res) => {
-  try {
-    const stats = await obtenerEstadisticas();
-    res.json(stats);
-  } catch (error) {
-    res.status(500).json({ message: 'Error al obtener estadísticas', error: error.message });
-  }
-});
-
-// Ruta para servir archivos estáticos de uploads
-app.use('/uploads', (req, res, next) => {
-  const filePath = path.join(uploadDir, req.path);
   if (fs.existsSync(filePath)) {
     res.sendFile(filePath);
   } else {
