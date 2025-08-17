@@ -313,14 +313,24 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Error en el servidor', error: err.message });
 });
 
-// Iniciar servidor
-app.listen(PORT, () => {
-  console.log(`Servidor backend escuchando en http://localhost:${PORT}`);
-});
+// Para Vercel, exportar la aplicación
+export default app;
 
-// Cerrar la conexión a la base de datos cuando se detiene el servidor
-process.on('SIGINT', async () => {
-  await db.close();
-  console.log('Conexión a la base de datos cerrada');
-  process.exit(0);
-});
+// Iniciar servidor local solo si no estamos en Vercel
+if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
+  app.listen(PORT, () => {
+    console.log(`Servidor backend escuchando en http://localhost:${PORT}`);
+  });
+
+  // Cerrar la conexión a la base de datos cuando se detiene el servidor
+  process.on('SIGINT', async () => {
+    await db.close();
+    console.log('Conexión a la base de datos cerrada');
+    process.exit(0);
+  });
+}
+
+// Para Vercel, necesitamos exportar un handler adicional
+export const handler = async (req, res) => {
+  return app(req, res);
+};
