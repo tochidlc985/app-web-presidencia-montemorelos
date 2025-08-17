@@ -13,9 +13,9 @@ export const ABSOLUTE_API_BASE_URL = isProduction
 export const ADJUSTED_API_BASE_URL = API_BASE_URL;
 
 export const API_ENDPOINTS = {
-  LOGIN: '/login',
-  REGISTER: '/register',
-  REPORTES: '/reportes',
-  PERFIL: '/perfil',
-  ESTADISTICAS: '/estadisticas'
+  LOGIN: '/api/login',
+  REGISTER: '/api/register',
+  REPORTES: '/api/reportes',
+  PERFIL: '/api/perfil',
+  ESTADISTICAS: '/api/estadisticas'
 };

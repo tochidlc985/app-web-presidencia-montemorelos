@@ -256,7 +256,7 @@ function requireRole(role) {
   };
 }
 
-// Rutas API - CON prefijo /api para que coincidan con la configuración del frontend
+// Rutas API
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
