@@ -295,8 +295,19 @@ app.get('/api/estadisticas', async (req, res) => {
 // Ruta principal - servir el archivo index.html del frontend
 app.get('/', (req, res) => {
   if (process.env.NODE_ENV === 'production') {
-    // En Vercel, servimos el archivo build/index.html
-    res.sendFile(path.join(__dirname, 'dist/index.html'));
+    // En Vercel, servimos el archivo dist/index.html
+    const indexPath = path.join(__dirname, 'dist/index.html');
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      // Si no existe el archivo en la ruta esperada, intentar con rutas alternativas
+      const altIndexPath = path.join(process.cwd(), 'dist/index.html');
+      if (fs.existsSync(altIndexPath)) {
+        res.sendFile(altIndexPath);
+      } else {
+        res.status(500).send('Error: No se encontró el archivo index.html');
+      }
+    }
   } else {
     // En desarrollo, servimos el archivo public/index.html
     res.sendFile(path.join(__dirname, 'public/index.html'));
@@ -306,7 +317,16 @@ app.get('/', (req, res) => {
 // Servir archivos estáticos del frontend
 if (process.env.NODE_ENV === 'production') {
   // En producción, servimos los archivos estáticos desde la carpeta dist
-  app.use(express.static(path.join(__dirname, 'dist')));
+  const distPath = path.join(__dirname, 'dist');
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+  } else {
+    // Si no existe la carpeta en la ruta esperada, intentar con rutas alternativas
+    const altDistPath = path.join(process.cwd(), 'dist');
+    if (fs.existsSync(altDistPath)) {
+      app.use(express.static(altDistPath));
+    }
+  }
 } else {
   // En desarrollo, servimos los archivos estáticos desde la carpeta public
   app.use(express.static(path.join(__dirname, 'public')));
