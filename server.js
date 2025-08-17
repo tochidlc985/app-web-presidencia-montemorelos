@@ -17,10 +17,8 @@ const __dirname = path.dirname(__filename);
 const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local';
 dotenv.config({ path: path.resolve(__dirname, envFile) });
 
-// Para Vercel, usar variables de entorno directamente
-if (process.env.VERCEL) {
-  console.log('Ejecutando en Vercel con variables de entorno configuradas');
-}
+// Configuración para entorno local
+console.log('Ejecutando en entorno local');
 
 const app = express();
 const PORT = 4000; // Set port directly for testing
@@ -31,10 +29,8 @@ app.use(cors({
     // Permitir solicitudes sin origen (como apps móviles)
     if (!origin) return callback(null, true);
     
-    // Permitir el origen de producción y desarrollo
+    // Permitir el origen de desarrollo
     const allowedOrigins = [
-      process.env.FRONTEND_URL,
-      'https://sistema-reportes-montemorelos.vercel.app',
       'http://localhost:5713'
     ];
     
@@ -313,24 +309,14 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Error en el servidor', error: err.message });
 });
 
-// Para Vercel, exportar la aplicación
-export default app;
+// Iniciar servidor local
+app.listen(PORT, () => {
+  console.log(`Servidor backend escuchando en http://localhost:${PORT}`);
+});
 
-// Iniciar servidor local solo si no estamos en Vercel
-if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
-  app.listen(PORT, () => {
-    console.log(`Servidor backend escuchando en http://localhost:${PORT}`);
-  });
-
-  // Cerrar la conexión a la base de datos cuando se detiene el servidor
-  process.on('SIGINT', async () => {
-    await db.close();
-    console.log('Conexión a la base de datos cerrada');
-    process.exit(0);
-  });
-}
-
-// Para Vercel, necesitamos exportar un handler adicional
-export const handler = async (req, res) => {
-  return app(req, res);
-};
+// Cerrar la conexión a la base de datos cuando se detiene el servidor
+process.on('SIGINT', async () => {
+  await db.close();
+  console.log('Conexión a la base de datos cerrada');
+  process.exit(0);
+});

@@ -1,25 +1,12 @@
-import { MongoClient, ObjectId } from 'mongodb';
-import bcrypt from 'bcryptjs';
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
+// Importar módulos necesarios
+const { MongoClient, ObjectId } = require('mongodb');
+const bcrypt = require('bcryptjs'); // Para el hashing de contraseñas
+const dotenv = require('dotenv'); // Para manejar variables de entorno
+const path = require('path'); // Para manejar rutas de archivos
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Cargar variables de entorno para Vercel
-dotenv.config({ path: path.resolve(__dirname, '.env') });
-
-// Verificar variables de entorno para Vercel
-if (!process.env.MONGO_URI) {
-  console.error('ERROR: MONGO_URI no está definida');
-  throw new Error('MONGO_URI es requerida');
-}
-
-if (!process.env.JWT_SECRET) {
-  console.error('ERROR: JWT_SECRET no está definida');
-  throw new Error('JWT_SECRET es requerida');
-}
+// Cargar variables de entorno desde el archivo .env
+const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local';
+dotenv.config({ path: path.resolve(__dirname, '..', envFile) });
 
 class DatabaseService {
   // URI de conexión a MongoDB Atlas desde variables de entorno
@@ -152,8 +139,8 @@ class DatabaseService {
     if (existente) throw new Error('El usuario ya existe');
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const result = await this.usersInternosCollection.insertOne({ 
-      nombre, email, password: hashedPassword, rol, fechaRegistro: new Date() 
+    const result = await this.usersInternosCollection.insertOne({
+      nombre, email, password: hashedPassword, rol, fechaRegistro: new Date()
     });
     return { _id: result.insertedId.toString(), nombre, email, rol, fechaRegistro: new Date() };
   }
@@ -202,11 +189,11 @@ class DatabaseService {
           // Si ya existe, actualizarlo
           await coleccionPerfil.updateOne(
             { email },
-            { 
-              $set: { 
+            {
+              $set: {
                 ...usuarioSinPassword,
                 fechaActualizacion: new Date()
-              } 
+              }
             }
           );
         }
@@ -260,11 +247,11 @@ class DatabaseService {
           // Si ya existe, actualizarlo
           await coleccionPerfil.updateOne(
             { email },
-            { 
-              $set: { 
+            {
+              $set: {
                 ...perfil,
                 fechaActualizacion: new Date()
-              } 
+              }
             }
           );
         }
@@ -317,11 +304,11 @@ class DatabaseService {
         // Actualizar el perfil en la colección correspondiente
         await coleccionPerfil.updateOne(
           { email },
-          { 
-            $set: { 
+          {
+            $set: {
               ...updateData,
               fechaActualizacion: new Date()
-            } 
+            }
           }
         );
       }
@@ -344,7 +331,7 @@ class DatabaseService {
       const reportesPendientes = await this.reportesCollection.countDocuments({ status: 'Pendiente' });
       const reportesEnProceso = await this.reportesCollection.countDocuments({ status: 'En Proceso' });
       const reportesResueltos = await this.reportesCollection.countDocuments({ status: 'Resuelto' });
-      
+
       return {
         total: totalReportes,
         pendientes: reportesPendientes,
@@ -379,4 +366,4 @@ class DatabaseService {
 }
 
 // Exportar una instancia única de la clase DatabaseService
-export const db = new DatabaseService();
+module.exports = { db: new DatabaseService() };

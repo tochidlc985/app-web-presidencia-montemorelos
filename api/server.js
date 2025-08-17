@@ -7,13 +7,9 @@ const path = require('path');
 const fs = require('fs');
 const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
-const { MongoClient, ObjectId } = require('mongodb');
-const bcrypt = require('bcryptjs');
+const { db } = require('../database.cjs');
 
-// Cargar variables de entorno
-dotenv.config();
-
-// Verificar variables de entorno
+// Asegurarnos de que las variables de entorno estén disponibles
 if (!process.env.MONGO_URI) {
   console.error('ERROR: MONGO_URI no está definida en las variables de entorno');
 }
@@ -22,170 +18,37 @@ if (!process.env.JWT_SECRET) {
   console.error('ERROR: JWT_SECRET no está definida en las variables de entorno');
 }
 
-// Cliente de MongoDB
-let client = null;
+// Cargar variables de entorno
+const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local';
+dotenv.config({ path: path.resolve(__dirname, '..', envFile) });
 
-// Nombres de bases de datos y colecciones
-const DB_NAME_REPORTES = 'Montemorelos';
-const COLLECTION_NAME_REPORTES = 'reportes';
-const DB_NAME_INTERNOS = 'Internos';
-const COLLECTION_NAME_USERS_INTERNOS = 'usuarios';
-const COLLECTION_NAME_ROLES_INTERNOS = 'roles';
-const DB_NAME_PERFIL = 'Perfil';
-const COLLECTION_NAME_USUARIO_PERFIL = 'usuario_perfiles';
-const COLLECTION_NAME_ADMINISTRADOR_PERFIL = 'administrador_perfiles';
-const COLLECTION_NAME_JEFE_DEPARTAMENTO_PERFIL = 'jefe_departamento_perfiles';
-const COLLECTION_NAME_TECNICO_PERFIL = 'tecnico_perfiles';
-
-// Función para conectar a la base de datos
-async function connectToDatabase(dbName) {
-  if (!client || !client.topology || !client.topology.isConnected()) {
-    client = new MongoClient(process.env.MONGO_URI);
-    await client.connect();
-  }
-  return client.db(dbName);
+// Para Vercel, necesitamos asegurarnos de que las variables de entorno estén disponibles
+if (!process.env.MONGO_URI) {
+  console.error('ERROR: MONGO_URI no está definida en las variables de entorno');
+  process.exit(1);
 }
 
-// Función para conectar a la colección de reportes
-async function conectarReportes() {
-  if (!global.reportesCollection) {
-    const db = await connectToDatabase(DB_NAME_REPORTES);
-    global.reportesCollection = db.collection(COLLECTION_NAME_REPORTES);
-  }
+if (!process.env.JWT_SECRET) {
+  console.error('ERROR: JWT_SECRET no está definida en las variables de entorno');
+  process.exit(1);
 }
 
-// Función para conectar a las colecciones de usuarios y roles
-async function conectarInternos() {
-  if (!global.usersInternosCollection || !global.rolesInternosCollection) {
-    const db = await connectToDatabase(DB_NAME_INTERNOS);
-    global.usersInternosCollection = db.collection(COLLECTION_NAME_USERS_INTERNOS);
-    global.rolesInternosCollection = db.collection(COLLECTION_NAME_ROLES_INTERNOS);
-  }
-}
-
-// Función para guardar un reporte
-async function guardarReporte(reporte) {
-  await conectarReportes();
-  const result = await global.reportesCollection.insertOne(reporte);
-  return { acknowledged: result.acknowledged, insertedId: result.insertedId.toString() };
-}
-
-// Función para obtener reportes
-async function obtenerReportes() {
-  await conectarReportes();
-  const reportes = await global.reportesCollection.find({}).sort({ timestamp: -1 }).toArray();
-  return reportes.map(reporte => ({
-    ...reporte,
-    _id: reporte._id.toString()
-  }));
-}
-
-// Función para actualizar un reporte
-async function actualizarReporte(id, update) {
-  await conectarReportes();
-  const result = await global.reportesCollection.updateOne({ _id: new ObjectId(id) }, { $set: update });
-  return result.modifiedCount > 0;
-}
-
-// Función para eliminar un reporte
-async function eliminarReporte(id) {
-  await conectarReportes();
-  const result = await global.reportesCollection.deleteOne({ _id: new ObjectId(id) });
-  return result.deletedCount > 0;
-}
-
-// Función para obtener un reporte por ID
-async function obtenerReportePorId(id) {
-  await conectarReportes();
-  return await global.reportesCollection.findOne({ _id: new ObjectId(id) });
-}
-
-// Función para registrar un usuario
-async function registrarUsuario({ nombre, email, password, rol }) {
-  await conectarInternos();
-  const existente = await global.usersInternosCollection.findOne({ email });
-  if (existente) throw new Error('El usuario ya existe');
-
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const result = await global.usersInternosCollection.insertOne({
-    nombre, email, password: hashedPassword, rol, fechaRegistro: new Date()
-  });
-  return { _id: result.insertedId.toString(), nombre, email, rol, fechaRegistro: new Date() };
-}
-
-// Función para autenticar un usuario
-async function autenticarUsuario({ email, password }) {
-  await conectarInternos();
-  const usuario = await global.usersInternosCollection.findOne({ email });
-  if (!usuario) throw new Error('Usuario no encontrado');
-
-  const passwordValida = await bcrypt.compare(password, usuario.password);
-  if (!passwordValida) throw new Error('Contraseña incorrecta');
-
-  const { password: _, ...usuarioSinPassword } = usuario;
-  return { ...usuarioSinPassword, _id: usuarioSinPassword._id.toString() };
-}
-
-// Función para buscar perfil por email
-async function buscarPerfilPorEmail(email) {
-  await conectarInternos();
-  const usuario = await global.usersInternosCollection.findOne({ email });
-  if (!usuario) return null;
-
-  const { password: _, ...perfil } = usuario;
-  return { ...perfil, _id: perfil._id.toString() };
-}
-
-// Función para actualizar perfil de usuario
-async function actualizarPerfilUsuario(email, updateData) {
-  await conectarInternos();
-  if (updateData.password) {
-    updateData.password = await bcrypt.hash(updateData.password, 10);
-  }
-  delete updateData._id;
-  delete updateData.rol;
-  delete updateData.email;
-  delete updateData.fechaRegistro;
-
-  const result = await global.usersInternosCollection.updateOne({ email }, { $set: updateData });
-  return result.modifiedCount > 0;
-}
-
-// Función para obtener estadísticas
-async function obtenerEstadisticas() {
-  await conectarReportes();
-  try {
-    const totalReportes = await global.reportesCollection.countDocuments();
-    const reportesPendientes = await global.reportesCollection.countDocuments({ status: 'Pendiente' });
-    const reportesEnProceso = await global.reportesCollection.countDocuments({ status: 'En Proceso' });
-    const reportesResueltos = await global.reportesCollection.countDocuments({ status: 'Resuelto' });
-
-    return {
-      total: totalReportes,
-      pendientes: reportesPendientes,
-      enProceso: reportesEnProceso,
-      resueltos: reportesResueltos
-    };
-  } catch (error) {
-    console.error('Error al obtener estadísticas:', error);
-    throw error;
-  }
-}
-
-// Crear aplicación Express
 const app = express();
 
-// Middleware
+// Middleware globales
 app.use(cors({
   origin: function (origin, callback) {
+    // Permitir solicitudes sin origen (como apps móviles)
     if (!origin) return callback(null, true);
 
+    // Permitir el origen de producción y desarrollo
     const allowedOrigins = [
       process.env.FRONTEND_URL,
       'https://sistema-reportes-montemorelos.vercel.app',
       'http://localhost:5713'
     ];
 
+    // Si estamos en desarrollo, permitir cualquier origen localhost
     if (process.env.NODE_ENV !== 'production' && origin && origin.includes('localhost:')) {
       return callback(null, true);
     }
@@ -201,29 +64,35 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
-
 app.use(bodyParser.json({ limit: '20mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '20mb' }));
 
-// Configurar directorio de uploads
-const uploadDir = path.join(__dirname, '..', 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+// Servir archivos estáticos desde la carpeta dist
+app.use(express.static(path.join(__dirname, '..', 'dist')));
 
-// Configurar multer para la subida de archivos
+// Middleware para loguear solicitudes
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.originalUrl}`);
+  next();
+});
+
+// Configuración de multer
+const uploadDir = path.resolve(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     cb(null, uniqueSuffix + '-' + file.originalname);
-  }
+  },
 });
-
 const upload = multer({
   storage,
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB máximo por archivo
   fileFilter: (req, file, cb) => {
+    // Permitir imágenes, videos y GIFs
     const allowedTypes = [
       'image/jpeg', 'image/png', 'image/gif',
       'video/mp4', 'video/webm', 'video/ogg'
@@ -235,7 +104,7 @@ const upload = multer({
   }
 });
 
-// Servir archivos estáticos
+// Servir archivos subidos
 app.use('/uploads', express.static(uploadDir));
 
 // Middleware para verificar JWT y rol
@@ -243,7 +112,6 @@ function requireRole(role) {
   return (req, res, next) => {
     const auth = req.headers.authorization;
     if (!auth) return res.status(401).json({ message: 'No autorizado' });
-
     const token = auth.split(' ')[1];
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -256,13 +124,13 @@ function requireRole(role) {
   };
 }
 
-// Rutas API
+// API: Reportes
 app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
   try {
     const files = req.files || [];
     const reporte = req.body.data ? JSON.parse(req.body.data) : req.body;
 
-    // Validación
+    // Validación robusta
     if (!reporte.email || !reporte.departamento || !reporte.descripcion || !reporte.tipoProblema || !reporte.quienReporta) {
       return res.status(400).json({ message: 'Faltan campos requeridos en el reporte' });
     }
@@ -277,8 +145,8 @@ app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
     }
 
     reporte.imagenes = files.map(f => f.filename);
-    const ok = await guardarReporte(reporte);
 
+    const ok = await db.guardarReporte(reporte);
     if (ok) {
       res.status(201).json({ message: 'Reporte guardado correctamente' });
     } else {
@@ -292,7 +160,7 @@ app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
 
 app.get('/api/reportes', async (req, res) => {
   try {
-    const reportes = await obtenerReportes();
+    const reportes = await db.obtenerReportes();
     res.json(reportes);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener reportes', error: error.message });
@@ -303,8 +171,7 @@ app.patch('/api/reportes/:id', requireRole('administrador'), async (req, res) =>
   try {
     const { id } = req.params;
     const update = req.body;
-    const ok = await actualizarReporte(id, update);
-
+    const ok = await db.actualizarReporte(id, update);
     if (ok) {
       res.json({ message: 'Reporte actualizado correctamente' });
     } else {
@@ -318,8 +185,9 @@ app.patch('/api/reportes/:id', requireRole('administrador'), async (req, res) =>
 app.delete('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
   try {
     const { id } = req.params;
-    const reporte = await obtenerReportePorId(id);
-    const ok = await eliminarReporte(id);
+    // Obtener reporte antes de eliminar
+    const reporte = await db.obtenerReportePorId(id);
+    const ok = await db.eliminarReporte(id);
 
     if (ok) {
       // Eliminar archivos asociados
@@ -339,6 +207,7 @@ app.delete('/api/reportes/:id', requireRole('administrador'), async (req, res) =
   }
 });
 
+// API: Usuarios
 app.post('/api/register', async (req, res) => {
   try {
     const { nombre, email, password, rol } = req.body;
@@ -352,7 +221,7 @@ app.post('/api/register', async (req, res) => {
       return res.status(400).json({ message: 'La contraseña debe tener al menos 8 caracteres' });
     }
 
-    const usuario = await registrarUsuario({ nombre, email, password, rol });
+    const usuario = await db.registrarUsuario({ nombre, email, password, rol });
     res.status(201).json({ message: 'Usuario registrado correctamente', usuario });
   } catch (error) {
     if (error.message === 'El usuario ya existe') {
@@ -370,18 +239,16 @@ app.post('/api/login', async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({ message: 'Email y contraseña requeridos' });
     }
-
-    const usuario = await autenticarUsuario({ email, password });
+    const usuario = await db.autenticarUsuario({ email, password });
     if (!usuario) {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
-
+    // Generar JWT
     const token = jwt.sign(
       { email: usuario.email, rol: usuario.rol },
       process.env.JWT_SECRET,
       { expiresIn: '8h' }
     );
-
     res.json({ usuario, token });
   } catch (error) {
     res.status(500).json({ message: 'Error al iniciar sesión', error: error.message });
@@ -390,7 +257,7 @@ app.post('/api/login', async (req, res) => {
 
 app.get('/api/perfil/:email', async (req, res) => {
   try {
-    const perfil = await buscarPerfilPorEmail(req.params.email);
+    const perfil = await db.buscarPerfilPorEmail(req.params.email);
     if (!perfil) return res.status(404).json({ message: 'Perfil no encontrado' });
     res.json(perfil);
   } catch (error) {
@@ -400,7 +267,7 @@ app.get('/api/perfil/:email', async (req, res) => {
 
 app.put('/api/perfil/:email', async (req, res) => {
   try {
-    const ok = await actualizarPerfilUsuario(req.params.email, req.body);
+    const ok = await db.actualizarPerfilUsuario(req.params.email, req.body);
     if (ok) {
       res.json({ message: 'Perfil actualizado correctamente' });
     } else {
@@ -413,28 +280,24 @@ app.put('/api/perfil/:email', async (req, res) => {
 
 app.get('/api/estadisticas', async (req, res) => {
   try {
-    const stats = await obtenerEstadisticas();
+    const stats = await db.obtenerEstadisticas();
     res.json(stats);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener estadísticas', error: error.message });
   }
 });
 
-// Ruta para servir archivos estáticos de uploads
-app.use('/uploads', (req, res, next) => {
-  const filePath = path.join(uploadDir, req.path);
-  if (fs.existsSync(filePath)) {
-    res.sendFile(filePath);
-  } else {
-    res.status(404).json({ message: 'Archivo no encontrado' });
-  }
+// Ruta principal - servir el archivo index.html del frontend desde dist
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
 });
 
-// Manejo de errores
+// Manejo de errores 404
 app.use((req, res) => {
   res.status(404).json({ message: 'Ruta no encontrada' });
 });
 
+// Manejo de errores generales
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ message: 'Error en el servidor', error: err.message });

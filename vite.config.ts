@@ -19,7 +19,7 @@ export default defineConfig({
     strictPort: true, // Asegura que el puerto no cambie si está ocupado
     proxy: {
       '/api': {
-        target: process.env.VITE_API_BASE_URL || 'http://localhost:4000',
+        target: 'http://localhost:4000',
         changeOrigin: true,
         secure: false
       },

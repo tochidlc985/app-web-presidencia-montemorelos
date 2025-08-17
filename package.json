@@ -13,10 +13,8 @@
     "start": "node server.js",
     "server": "node server.js",
     "test-db": "node test-server.js",
-    "vercel-build": "npm run build",
-    "vercel-dev": "vercel dev",
-    "deploy": "vercel --prod",
-    "deploy:full": "npm run build && vercel --prod"
+    "build-local": "npm run build",
+    "start-local": "npm run dev"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

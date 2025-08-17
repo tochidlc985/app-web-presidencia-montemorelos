@@ -1,0 +1,45 @@
+# Dependencias
+node_modules/
+.yarn/
+.npm/
+
+# Entorno local
+.env.local
+.env.development
+
+# Logs
+*.log
+logs/
+
+# Directorios de construcción
+dist/
+build/
+
+# Tests
+**/*.test.js
+**/*.test.ts
+**/*.spec.js
+**/*.spec.ts
+test/
+tests/
+__tests__/
+
+# Cobertura de código
+coverage/
+.nyc_output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Otros
+.git/
+.gitignore
+README.md
+now.json
