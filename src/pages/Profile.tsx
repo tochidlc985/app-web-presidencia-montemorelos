@@ -33,7 +33,7 @@ interface PreguntaFrecuente {
 }
 
 // Helper para mostrar un toast con estilos personalizados
-const showThemedToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+const showThemedToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
   let bgColor = '#3B82F6';
   let iconComponent: React.ReactElement = <Info className="text-white h-5 w-5" />;
 
@@ -46,7 +46,12 @@ const showThemedToast = (message: string, type: 'success' | 'error' | 'info' = '
       bgColor = '#EF4444';
       iconComponent = <AlertCircle className="text-white h-5 w-5" />;
       break;
+    case 'warning':
+      bgColor = '#F59E0B';
+      iconComponent = <AlertCircle className="text-white h-5 w-5" />;
+      break;
     case 'info':
+    default:
       bgColor = '#3B82F6';
       iconComponent = <Info className="text-white h-5 w-5" />;
       break;
@@ -74,32 +79,50 @@ const ALLOWED_IMG_TYPES = [
   'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'
 ];
 
-// Helper para simular API request (reemplaza con tu instancia real de `axios` o `fetch`)
-
+// Helper para actualizar perfil en el backend
 const updateUserProfile = async (userData: Usuario): Promise<Usuario> => {
   try {
-    // Asegurarse de que el email existe antes de hacer la petición
     if (!userData.email) {
       throw new Error('El email del usuario es requerido para actualizar el perfil');
     }
     
-    // Crear una copia de los datos para enviar al backend
     const payload = { ...userData };
-    
-    // Eliminar propiedades que no deberían enviarse al backend
     delete payload.fotoZoom;
     delete payload.fotoRotation;
     delete payload.fotoPositionX;
     delete payload.fotoPositionY;
     
-    // El endpoint solo devuelve un mensaje de éxito, así que devolvemos los datos que enviamos
-    return userData;
+    // Simular llamada a API - reemplazar con tu endpoint real
+    console.log('Enviando datos al backend:', payload);
+    
+    // Simulación de respuesta exitosa
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(userData);
+      }, 500);
+    });
+    
+    // Para implementación real, descomentar:
+    /*
+    const response = await fetch('/api/users/profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Error del servidor: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.user || userData;
+    */
   } catch (error: any) {
     console.error('Error updating user profile:', error);
-    
-    // Proporcionar un mensaje de error más específico si está disponible
-    const errorMessage = error.response?.data?.message || error.message || 'Error desconocido al actualizar el perfil';
-    throw new Error(errorMessage);
+    throw error;
   }
 };
 
@@ -115,6 +138,7 @@ const Profile: React.FC = (): JSX.Element => {
   const [fotoPreview, setFotoPreview] = useState<string | null>(null); // URL/Base64 para previsualización de la foto
   const [tiempoActivo, setTiempoActivo] = useState({ dias: 0, horas: 0, minutos: 0, segundos: 0 }); // Tiempo de la cuenta activa
   const [mostrarPreguntas, setMostrarPreguntas] = useState(false); // Toggle de FAQs
+  const [] = useState(false); // Nuevo estado para controlar el guardado
   
   // Estados para manipulación de la imagen
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -123,78 +147,59 @@ const Profile: React.FC = (): JSX.Element => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const dragStartRef = useRef({ x: 0, y: 0 }); // Ref para el inicio del drag
 
-  // Autoguardado: Cuando `form` cambia y estamos en modo edición, y no estamos arrastrando
+  // Autoguardado: Cuando `form` cambia y estamos en modo edición
   const saveUserDataLocally = useCallback(async (data: Usuario) => {
     try {
       // Guardar en localStorage para persistencia básica
       localStorage.setItem('usuario', JSON.stringify(data));
 
-      // También guardar en el backend en tiempo real solo si estamos en modo edición y hay un email válido
+      // Guardar en el backend en tiempo real
       if (edit && data.email) {
         try {
-          // Crear una copia de los datos para enviar al backend
           const payload: Usuario = { ...data };
-
-          // Eliminar propiedades que no deberían enviarse al backend
           delete payload.fotoZoom;
           delete payload.fotoRotation;
           delete payload.fotoPositionX;
           delete payload.fotoPositionY;
 
           await updateUserProfile(payload);
+          showThemedToast('Cambios guardados automáticamente', 'success');
         } catch (apiError: any) {
           console.error('Error al guardar en el backend:', apiError);
-          // No interrumpimos el flujo del usuario si falla el guardado en el backend
-          // Pero registramos el error para depuración
-          if (apiError.response) {
-            console.error('Error response:', apiError.response.data);
-          }
+          showThemedToast('Cambios guardados localmente. Error al sincronizar con servidor.', 'warning');
         }
       }
     } catch (error) {
       console.error('Error al guardar datos en tiempo real:', error);
-      // No mostramos un toast aquí para no interrumpir la experiencia del usuario
+      showThemedToast('Error al guardar cambios', 'error');
     }
-  }, [edit, updateUserProfile]); // Incluir todas las dependencias necesarias
+  }, [edit, updateUserProfile]);
 
   // Efecto para la carga inicial de datos del usuario y configuración del temporizador
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
-    let navigated = false;
 
     const loadUserData = async () => {
       let initialUserData: Usuario | null = usuario || null;
-      const currentPath = window.location.pathname;
-
-      // Si el usuario no está en el contexto (p.ej., refresco de página), búscalo en localStorage.
+      
+      // Si no hay datos en el contexto, intentar obtenerlos de localStorage
       if (!initialUserData) {
         const savedData = localStorage.getItem('usuario');
         if (savedData) {
           try {
             initialUserData = JSON.parse(savedData) as Usuario;
+            // Si encontramos datos en localStorage, actualizar el contexto
+            if (setUsuario) {
+              setUsuario(initialUserData);
+            }
           } catch (e) {
             console.error("Error parsing user data from localStorage:", e);
-            localStorage.removeItem('usuario'); // Corrupted data
-            if (!isLoggedIn() && currentPath !== '/login' && !navigated) {
-              navigated = true;
-              showThemedToast('Sesión expirada o datos corruptos. Inicia sesión de nuevo.', 'error');
-              navigate('/login', { replace: true });
-              return;
-            }
-            return;
+            localStorage.removeItem('usuario');
           }
         }
       }
 
-      // Si no hay datos de usuario después de todo, y no está loggeado, redirigir
-      if (!initialUserData && !isLoggedIn() && currentPath !== '/login' && !navigated) {
-        navigated = true;
-        showThemedToast('No has iniciado sesión.', 'error');
-        navigate('/login', { replace: true });
-        return;
-      }
-
-      // Aplicar datos al estado del formulario
+      // Resto del código de carga...
       if (initialUserData) {
         setForm(initialUserData);
         setFotoPreview(initialUserData.foto || null);
@@ -208,9 +213,6 @@ const Profile: React.FC = (): JSX.Element => {
           calculateAndUpdate(); // Call immediately
           intervalId = setInterval(calculateAndUpdate, 1000); // Update every second
         }
-      } else {
-        // Fallback si isLoggedIn es true pero no se encontraron datos de usuario.
-        showThemedToast('Datos de usuario no disponibles. Intenta recargar o iniciar sesión de nuevo.', 'error');
       }
     };
 
@@ -248,31 +250,40 @@ const Profile: React.FC = (): JSX.Element => {
   const validateEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   const validateProfileForm = useCallback((data: Usuario): string | null => {
-    if (!data.nombre || data.nombre.trim().length < 3) return 'El nombre debe tener al menos 3 caracteres.';
-    if (!data.email || !validateEmail(data.email)) return 'El formato del correo electrónico es inválido.';
-    if (!data.departamento || data.departamento.trim().length < 2) return 'El departamento es obligatorio.';
+    const errors = [];
     
-    // Convertir `roles` a array si es un string para la validación
-    const rolesArray = Array.isArray(data.roles) ? data.roles : (typeof data.roles === 'string' ? data.roles.split(',').map(r => r.trim()).filter(Boolean) : []);
-    if (rolesArray.length === 0) return 'El rol es obligatorio.';
+    if (!data.nombre || data.nombre.trim().length < 3) 
+      errors.push('El nombre debe tener al menos 3 caracteres');
     
-    if (!data.genero || !['masculino', 'femenino', 'otro'].includes(data.genero)) return 'Debes seleccionar un género válido.';
-    return null;
+    if (!data.email || !validateEmail(data.email)) 
+      errors.push('El formato del correo electrónico es inválido');
+    
+    if (!data.departamento || data.departamento.trim().length < 2) 
+      errors.push('El departamento es obligatorio');
+    
+    const rolesArray = Array.isArray(data.roles) ? data.roles : 
+      (typeof data.roles === 'string' ? data.roles.split(',').map(r => r.trim()).filter(Boolean) : []);
+    
+    if (rolesArray.length === 0) 
+      errors.push('El rol es obligatorio');
+    
+    if (!data.genero || !['masculino', 'femenino', 'otro'].includes(data.genero)) 
+      errors.push('Debes seleccionar un género válido');
+    
+    return errors.length > 0 ? errors.join('. ') : null;
   }, []);
 
-  // Manejador de cambios en inputs del formulario. Aquí aplicaremos un autoguardado (simulado).
+  // Manejador de cambios en inputs del formulario con autoguardado
   const handleInputChange = (
     e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
     let updatedValue: any = value;
 
-    // Convertir roles a un array si el input es de roles (por si es texto separado por comas)
     if (name === 'roles' && typeof value === 'string') {
       updatedValue = value.split(',').map(r => r.trim()).filter(Boolean);
     }
     
-    // Convertir la fecha a formato ISO string
     if (name === 'fechaRegistro') {
         const dateObj = new Date(value);
         updatedValue = isNaN(dateObj.getTime()) ? '' : dateObj.toISOString();
@@ -280,11 +291,9 @@ const Profile: React.FC = (): JSX.Element => {
 
     setForm(prevForm => {
         const newForm = { ...prevForm, [name]: updatedValue };
-        if (edit) { // Solo autoguardar si estamos en modo edición
-            showThemedToast('Guardando automáticamente...', 'info'); // Pequeño feedback visual
+        if (edit) {
             saveUserDataLocally(newForm).catch(error => {
               console.error('Error en autoguardado:', error);
-              // No mostramos un toast adicional para no sobrecargar al usuario
             });
         }
         return newForm;

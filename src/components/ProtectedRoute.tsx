@@ -41,10 +41,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
       if (!hasValidRole) {
         toast.error('Su rol no tiene permisos para acceder a esta página.');
-        logout(); // Limpia los datos de autenticación
+        // No hacemos logout inmediatamente para evitar problemas durante la edición
+        // Solo marcamos como no autorizado
+        setIsAuthorized(false);
+      } else {
+        setIsAuthorized(true);
       }
-
-      setIsAuthorized(hasValidRole);
     }
   }, [isClient, isLoggedIn, usuario, logout]);
 
