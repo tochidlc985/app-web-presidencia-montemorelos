@@ -9,6 +9,9 @@ import jwt from 'jsonwebtoken';
 import { fileURLToPath } from 'url';
 import { db } from './database.js';
 
+// Importar módulos necesarios para Vercel
+import { createServer } from 'http';
+
 // Cargar variables de entorno
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -345,10 +348,19 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Error en el servidor', error: err.message });
 });
 
-// Iniciar servidor local
-app.listen(PORT, () => {
-  console.log(`Servidor backend escuchando en http://localhost:${PORT}`);
-});
+// Crear servidor HTTP
+const server = createServer(app);
+
+// Iniciar servidor
+if (process.env.NODE_ENV !== 'production') {
+  // Solo para desarrollo local
+  server.listen(PORT, () => {
+    console.log(`Servidor backend escuchando en http://localhost:${PORT}`);
+  });
+}
+
+// Exportar para Vercel serverless
+export default app;
 
 // Cerrar la conexión a la base de datos cuando se detiene el servidor
 process.on('SIGINT', async () => {
