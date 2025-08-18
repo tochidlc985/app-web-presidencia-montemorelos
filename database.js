@@ -152,8 +152,8 @@ class DatabaseService {
     if (existente) throw new Error('El usuario ya existe');
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const result = await this.usersInternosCollection.insertOne({ 
-      nombre, email, password: hashedPassword, rol, fechaRegistro: new Date() 
+    const result = await this.usersInternosCollection.insertOne({
+      nombre, email, password: hashedPassword, rol, fechaRegistro: new Date()
     });
     return { _id: result.insertedId.toString(), nombre, email, rol, fechaRegistro: new Date() };
   }
@@ -202,11 +202,11 @@ class DatabaseService {
           // Si ya existe, actualizarlo
           await coleccionPerfil.updateOne(
             { email },
-            { 
-              $set: { 
+            {
+              $set: {
                 ...usuarioSinPassword,
                 fechaActualizacion: new Date()
-              } 
+              }
             }
           );
         }
@@ -260,11 +260,11 @@ class DatabaseService {
           // Si ya existe, actualizarlo
           await coleccionPerfil.updateOne(
             { email },
-            { 
-              $set: { 
+            {
+              $set: {
                 ...perfil,
                 fechaActualizacion: new Date()
-              } 
+              }
             }
           );
         }
@@ -298,33 +298,27 @@ class DatabaseService {
 
     // También actualizar en la colección de perfiles correspondiente
     try {
-      // Primero obtenemos el usuario para saber su rol
+      const dbPerfil = await this.connectToDatabase(this.DB_NAME_PERFIL);
+
+      // Obtener el rol del usuario para saber en qué colección de perfiles actualizar
       const usuario = await this.usersInternosCollection.findOne({ email });
-      if (usuario && usuario.rol) {
-        const dbPerfil = await this.connectToDatabase(this.DB_NAME_PERFIL);
+      if (!usuario) return false;
 
-        let coleccionPerfil;
-        if (usuario.rol === 'administrador') {
-          coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_ADMINISTRADOR_PERFIL);
-        } else if (usuario.rol === 'jefe_departamento') {
-          coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_JEFE_DEPARTAMENTO_PERFIL);
-        } else if (usuario.rol === 'tecnico') {
-          coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_TECNICO_PERFIL);
-        } else {
-          coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_USUARIO_PERFIL);
-        }
-
-        // Actualizar el perfil en la colección correspondiente
-        await coleccionPerfil.updateOne(
-          { email },
-          { 
-            $set: { 
-              ...updateData,
-              fechaActualizacion: new Date()
-            } 
-          }
-        );
+      let coleccionPerfil;
+      if (usuario.rol === 'administrador') {
+        coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_ADMINISTRADOR_PERFIL);
+      } else if (usuario.rol === 'jefe_departamento') {
+        coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_JEFE_DEPARTAMENTO_PERFIL);
+      } else if (usuario.rol === 'tecnico') {
+        coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_TECNICO_PERFIL);
+      } else {
+        coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_USUARIO_PERFIL);
       }
+
+      await coleccionPerfil.updateOne(
+        { email },
+        { $set: updateData }
+      );
     } catch (error) {
       console.error('Error al actualizar en colección de perfiles:', error);
       // No lanzamos el error para no interrumpir el flujo principal
@@ -338,15 +332,15 @@ class DatabaseService {
    * @returns {Object} Estadísticas de reportes
    */
   async obtenerEstadisticas() {
-    await this.conectarReportes();
     try {
-      const totalReportes = await this.reportesCollection.countDocuments();
-      const reportesPendientes = await this.reportesCollection.countDocuments({ status: 'Pendiente' });
-      const reportesEnProceso = await this.reportesCollection.countDocuments({ status: 'En Proceso' });
-      const reportesResueltos = await this.reportesCollection.countDocuments({ status: 'Resuelto' });
-      
+      await this.conectarReportes();
+
+      // Contar reportes por estado
+      const reportesPendientes = await this.reportesCollection.countDocuments({ estado: 'Pendiente' });
+      const reportesEnProceso = await this.reportesCollection.countDocuments({ estado: 'En Proceso' });
+      const reportesResueltos = await this.reportesCollection.countDocuments({ estado: 'Resuelto' });
+
       return {
-        total: totalReportes,
         pendientes: reportesPendientes,
         enProceso: reportesEnProceso,
         resueltos: reportesResueltos
