@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 // Importa los iconos de Lucide-React
 import { User, Mail, Lock, UserPlus, Loader2, Users, Info, LogIn } from 'lucide-react'; // Añadido 'Info' y 'LogIn'
 import BackgroundMedia from '../components/BackgroundMedia';
-import { API_BASE_URL, API_ENDPOINTS } from '../services/apiConfig';
+import { API_ENDPOINTS } from '../services/apiConfig';
 import api from '../api';
 
 const Register: React.FC = () => {
@@ -65,13 +65,33 @@ const Register: React.FC = () => {
         throw new Error('Error al registrar. Por favor, intenta de nuevo.');
       }
 
-      const data = res.data;
 
       toast.success('Registro exitoso. Redirigiendo para iniciar sesión...');
       setTimeout(() => navigate('/login'), 1500);
     } catch (err: any) {
-      setError(err.message);
-      toast.error(err.message);
+      // Mejorar el manejo de errores para proporcionar mensajes más claros
+      let errorMessage = 'Error al registrar usuario';
+      
+      if (err.response) {
+        // El servidor respondió con un código de error
+        if (err.response.status === 409) {
+          errorMessage = 'El usuario ya existe. Por favor, utiliza otro correo electrónico.';
+        } else if (err.response.status === 500) {
+          errorMessage = 'Error interno del servidor. Por favor, intenta más tarde.';
+        } else {
+          errorMessage = err.response.data?.message || 'Error al registrar usuario';
+        }
+      } else if (err.request) {
+        // La solicitud se hizo pero no se recibió respuesta
+        errorMessage = 'No se pudo conectar al servidor. Verifica tu conexión a internet.';
+      } else if (err.message === 'Network Error') {
+        errorMessage = 'Error de red. Por favor, verifica tu conexión a internet.';
+      } else {
+        errorMessage = err.message || 'Error al registrar usuario';
+      }
+      
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }

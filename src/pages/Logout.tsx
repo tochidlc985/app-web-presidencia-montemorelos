@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { LogIn, UserPlus, Shield } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
 
 const Logout = () => {
   const navigate = useNavigate();
@@ -69,6 +70,21 @@ const Logout = () => {
       ? (rolRaw[0] || '')
       : rolRaw;
     sessionStorage.setItem('lastUserRole', rol);
+
+    // Mostrar notificación de despedida
+    toast.success(`¡Hasta pronto, ${usuario?.nombre || 'Usuario'}!`, {
+      duration: 4000,
+      position: 'top-center',
+      style: {
+        background: '#f97316',
+        color: '#fff',
+        fontWeight: 'bold',
+        padding: '16px',
+        borderRadius: '8px',
+        fontSize: '16px',
+      },
+    });
+
     confirmedLogout.current = true;
     logout();
     // No setStep aquí: esperamos a la actualización del usuario (el re-render lo maneja el efecto de arriba)

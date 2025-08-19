@@ -28,7 +28,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const app = express();
-const PORT = process.env.PORT || 4000; // Usar puerto de Vercel o 4000 para desarrollo local
+const PORT = 4000; // Forzar el uso del puerto 4000
 
 // Middleware globales
 app.use(cors({
@@ -38,11 +38,19 @@ app.use(cors({
     
     // Permitir el origen de desarrollo
     const allowedOrigins = [
-      'http://localhost:5713'
+      'http://localhost:5173',
+      'http://localhost:5713',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:5713'
     ];
     
     // Si estamos en desarrollo, permitir cualquier origen localhost
     if (process.env.NODE_ENV !== 'production' && origin && origin.includes('localhost:')) {
+      return callback(null, true);
+    }
+    
+    // Permitir cualquier origen en desarrollo
+    if (process.env.NODE_ENV !== 'production') {
       return callback(null, true);
     }
     
@@ -54,7 +62,7 @@ app.use(cors({
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true
 }));
 app.use(bodyParser.json({ limit: '20mb' }));
@@ -155,7 +163,6 @@ app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
   }
 });
 
-// Obtener todos los reportes
 app.get('/api/reportes', async (req, res) => {
   try {
     const reportes = await db.obtenerReportes();
@@ -166,7 +173,7 @@ app.get('/api/reportes', async (req, res) => {
 });
 
 // Actualizar estado o prioridad del reporte
-app.patch('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
+app.patch('/reportes/:id', requireRole('administrador'), async (req, res) => {
   try {
     const { id } = req.params;
     const update = req.body;
@@ -182,7 +189,7 @@ app.patch('/api/reportes/:id', requireRole('administrador'), async (req, res) =>
 });
 
 // Eliminar reporte (solo admin) y borrar imágenes asociadas
-app.delete('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
+app.delete('/reportes/:id', requireRole('administrador'), async (req, res) => {
   try {
     const { id } = req.params;
     // Obtener reporte antes de eliminar
@@ -313,7 +320,12 @@ app.get('/', (req, res) => {
     }
   } else {
     // En desarrollo, servimos el archivo public/index.html
-    res.sendFile(path.join(__dirname, 'public/index.html'));
+    const publicPath = path.join(__dirname, 'public/index.html');
+    if (fs.existsSync(publicPath)) {
+      res.sendFile(publicPath);
+    } else {
+      res.status(500).send('Error: No se encontró el archivo index.html en el directorio public');
+    }
   }
 });
 
@@ -328,13 +340,50 @@ if (process.env.NODE_ENV === 'production') {
     const altDistPath = path.join(process.cwd(), 'dist');
     if (fs.existsSync(altDistPath)) {
       app.use(express.static(altDistPath));
+    } else {
+      console.error('No se encontró la carpeta dist para servir archivos estáticos en producción');
     }
   }
 } else {
   // En desarrollo, servimos los archivos estáticos desde la carpeta public
-  app.use(express.static(path.join(__dirname, 'public')));
-  app.use('/src', express.static(path.join(__dirname, '../src')));
-  app.use('/node_modules', express.static(path.join(__dirname, '../node_modules')));
+  const publicPath = path.join(__dirname, 'public');
+  if (fs.existsSync(publicPath)) {
+    app.use(express.static(publicPath));
+  } else {
+    console.error('No se encontró la carpeta public para servir archivos estáticos en desarrollo');
+    // Intentar con rutas alternativas
+    const altPublicPath = path.join(process.cwd(), 'public');
+    if (fs.existsSync(altPublicPath)) {
+      app.use(express.static(altPublicPath));
+      console.log('Sirviendo archivos estáticos desde:', altPublicPath);
+    }
+  }
+
+  // También servimos la carpeta src para desarrollo
+  const srcPath = path.join(__dirname, 'src');
+  if (fs.existsSync(srcPath)) {
+    app.use('/src', express.static(srcPath));
+  } else {
+    // Intentar con rutas alternativas
+    const altSrcPath = path.join(process.cwd(), 'src');
+    if (fs.existsSync(altSrcPath)) {
+      app.use('/src', express.static(altSrcPath));
+      console.log('Sirviendo archivos src desde:', altSrcPath);
+    }
+  }
+
+  // Servir node_modules si es necesario
+  const nodeModulesPath = path.join(__dirname, 'node_modules');
+  if (fs.existsSync(nodeModulesPath)) {
+    app.use('/node_modules', express.static(nodeModulesPath));
+  } else {
+    // Intentar con rutas alternativas
+    const altNodeModulesPath = path.join(process.cwd(), 'node_modules');
+    if (fs.existsSync(altNodeModulesPath)) {
+      app.use('/node_modules', express.static(altNodeModulesPath));
+      console.log('Sirviendo node_modules desde:', altNodeModulesPath);
+    }
+  }
 }
 
 // Manejo de errores 404

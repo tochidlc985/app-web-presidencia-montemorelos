@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { API_ENDPOINTS } from '../services/apiConfig';
 import api from '../api';
+import { AxiosRequestConfig } from 'axios';
+
 
 // Interfaz para el tipo de Reporte original desde la API
 interface Reporte {
@@ -44,12 +46,26 @@ interface ActividadReciente {
   descripcion?: string; // Descripción completa para el modal de detalle
 }
 
-// Definiciones de tooltips para KPIs (asegúrate de que todos los labels tienen su tooltip)
+// Definiciones de tooltips para KPIs
 const KPI_TOOLTIPS: Record<string, string> = {
   'Reportes del Mes': 'Cantidad total de reportes registrados en el mes actual.',
   'Reportes Pendientes': 'Número de reportes que aún no han sido resueltos y están en espera.',
   'Reportes Críticos': 'Incidentes marcados con la máxima urgencia que requieren atención inmediata y pueden interrumpir operaciones.',
   'Departamentos Activos': 'Cantidad de departamentos que han reportado problemas en el sistema durante el mes actual.'
+};
+
+// Helper function to determine activity item color class
+const getActivityColorClass = (status: string): string => {
+  switch (status) {
+    case 'Pendiente':
+      return 'bg-red-500 text-white';
+    case 'En Proceso':
+      return 'bg-amber-500 text-white';
+    case 'Resuelto':
+      return 'bg-emerald-500 text-white';
+    default:
+      return 'bg-gray-500 text-white';
+  }
 };
 
 const Home: React.FC = () => {
@@ -75,7 +91,7 @@ const Home: React.FC = () => {
   const [filtroPrioridad, setFiltroPrioridad] = useState<string>('todos');
   const [detalleReporte, setDetalleReporte] = useState<ActividadReciente | null>(null);
 
-  const quickActions = [
+  const quickActions = useMemo(() => [
     {
       title: 'Crear Nuevo Reporte',
       description: 'Reporta un problema o solicitud de forma ágil y sencilla en pocos pasos.',
@@ -83,7 +99,7 @@ const Home: React.FC = () => {
       link: '/reporte',
       color: 'from-indigo-600 to-blue-700',
       hoverColor: 'group-hover:from-indigo-700 group-hover:to-blue-800',
-      textColor: 'text-indigo-900', // Un color de texto que complemente el degradado
+      textColor: 'text-indigo-900',
     },
     {
       title: 'Ver Dashboard',
@@ -103,17 +119,47 @@ const Home: React.FC = () => {
       hoverColor: 'group-hover:from-rose-600 group-hover:to-red-700',
       textColor: 'text-red-900',
     },
-    // Si usas un cuarto:
-    // {
-    //   title: 'Configuración Avanzada',
-    //   description: 'Personaliza la aplicación, gestiona usuarios y configura alertas del sistema.',
-    //   icon: Settings,
-    //   link: '/settings',
-    //   color: 'from-gray-600 to-gray-700',
-    //   hoverColor: 'group-hover:from-gray-700 group-hover:to-gray-800',
-    //   textColor: 'text-gray-900',
-    // },
-  ];
+  ], []);
+
+  // Function to process raw report data into UI-friendly format
+
+  // Function to handle API errors
+  const handleApiError = useCallback((err: any) => {
+    let errorMessage: string;
+    console.error('Error detallado al cargar datos:', err);
+
+    if (err.name === 'AbortError') {
+      errorMessage = 'La solicitud tardó demasiado tiempo. Por favor, intenta de nuevo.';
+    } else if (err.response) {
+      if (err.response.status === 500) {
+        errorMessage = 'Error interno del servidor. Por favor, intenta más tarde.';
+      } else if (err.response.status === 401) {
+        errorMessage = 'No autorizado. Por favor, inicia sesión de nuevo.';
+        localStorage.removeItem('token');
+        localStorage.removeItem('usuario');
+        navigate('/login');
+      } else if (err.response.status === 404) {
+        errorMessage = 'Recurso no encontrado. Verifica la configuración.';
+      } else {
+        errorMessage = `Error del servidor: ${err.response.status}`;
+      }
+    } else if (err.request) {
+      errorMessage = 'No se pudo conectar al servidor. Verifica tu conexión a internet.';
+    } else if (err.message === 'Network Error') {
+      errorMessage = 'Error de red. Por favor, verifica tu conexión a internet.';
+    } else {
+      errorMessage = err.message || 'Error desconocido al cargar los datos';
+    }
+
+    setError(errorMessage);
+    setStats([
+      { label: 'Reportes del Mes', value: 'N/A', icon: FileText, color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-50' },
+      { label: 'Reportes Pendientes', value: 'N/A', icon: Clock, color: 'from-amber-500 to-orange-600', bgColor: 'bg-orange-50' },
+      { label: 'Reportes Críticos', value: 'N/A', icon: AlertTriangle, color: 'from-red-600 to-red-700', bgColor: 'bg-red-50' },
+      { label: 'Departamentos Activos', value: 'N/A', icon: Users, color: 'from-emerald-500 to-green-600', bgColor: 'bg-green-50' },
+    ]);
+    setRecentActivity([]);
+  }, [navigate]); // navigate is a stable dependency
 
   useEffect(() => {
     const fetchData = async () => {
@@ -125,17 +171,17 @@ const Home: React.FC = () => {
           throw new Error("No hay token de autenticación. Por favor, inicia sesión.");
         }
 
-        const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-
-        // Añadir un timeout para evitar que la petición se quede colgada
+        const config = { headers: { Authorization: `Bearer ${token}` } };
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 seconds timeout
 
         try {
           const res = await api.get(API_ENDPOINTS.REPORTES, {
             ...config,
-            // signal no es compatible con la versión actual de axios
-          });
+            signal: controller.signal,
+          } as AxiosRequestConfig);
+          console.log('Datos de reportes recibidos:', res.data);
+          
 
           clearTimeout(timeoutId);
 
@@ -143,16 +189,14 @@ const Home: React.FC = () => {
             throw new Error('No se recibieron datos del servidor');
           }
 
-          // Verificar si data es un array, si no lo es, intentar obtener la propiedad correcta
-          const data = res.data;
-          // Convertir explícitamente a any para acceder a propiedades que podrían no existir en el tipo
-          const dataAny = data as any;
-          const reportes: Reporte[] = Array.isArray(data) ? data : (dataAny?.reportes || dataAny?.data || []);
+          const responseData = res.data as any;
+          const reportes: Reporte[] = Array.isArray(responseData) ? responseData : (responseData?.reportes || responseData?.data || []);
 
           if (!Array.isArray(reportes)) {
             throw new Error('Formato de datos de reportes incorrecto.');
           }
 
+          // Procesar los datos directamente en lugar de usar la función memoizada
           const now = new Date();
           const reportesMes = reportes.filter(r => {
             const fecha = r.timestamp ? new Date(r.timestamp) : new Date(0);
@@ -163,100 +207,72 @@ const Home: React.FC = () => {
           const resueltosCount = reportes.filter(r => r.status === 'Resuelto').length;
           setTotalReportes(reportes.length);
           setResueltos(resueltosCount);
+
           const departamentosSet = new Set<string>();
-          reportesMes.forEach(r => (Array.isArray(r.departamento) ? r.departamento : []).forEach((d: string) => departamentosSet.add(d)));
+          reportesMes.forEach(r => {
+            if (Array.isArray(r.departamento)) {
+              r.departamento.forEach((d: string) => departamentosSet.add(d));
+            } else if (r.departamento) {
+              departamentosSet.add(r.departamento);
+            }
+          });
 
           setStats([
             { label: 'Reportes del Mes', value: reportesMes.length, icon: FileText, color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-50' },
             { label: 'Reportes Pendientes', value: pendientes, icon: Clock, color: 'from-amber-500 to-orange-600', bgColor: 'bg-orange-50' },
-            { label: 'Reportes Críticos', value: criticos, icon: AlertTriangle, color: criticos > 0 ? 'from-red-600 to-red-700' : 'from-red-500 to-red-600', bgColor: 'bg-red-50' }, // Siempre crítico en rojo
+            { label: 'Reportes Críticos', value: criticos, icon: AlertTriangle, color: criticos > 0 ? 'from-red-600 to-red-700' : 'from-red-500 to-red-600', bgColor: 'bg-red-50' },
             { label: 'Departamentos Activos', value: departamentosSet.size, icon: Users, color: 'from-emerald-500 to-green-600', bgColor: 'bg-green-50' },
           ]);
 
+          const sortedReports = [...reportes].sort((a, b) => {
+            const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return dateB - dateA;
+          });
+
           setRecentActivity(
-            reportes
-              .sort((a, b) => {
-                const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-                const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-                return dateB - dateA; // Los más recientes primero
-              })
-              .slice(0, 15) // Limitar a las 15 actividades más recientes
+            sortedReports
+              .slice(0, 15)
               .map((r) => ({
                 id: r._id,
                 dept: Array.isArray(r.departamento) ? r.departamento.join(', ') : (r.departamento || 'N/A'),
                 priority: r.prioridad,
-                issue: r.descripcion.length > 80 ? r.descripcion.substring(0, 80) + '...' : r.descripcion, // Breve descripción para la lista
+                issue: r.descripcion.length > 80 ? r.descripcion.substring(0, 80) + '...' : r.descripcion,
                 time: r.timestamp ? new Date(r.timestamp).toLocaleString() : 'N/A',
                 status: r.status,
                 quienReporta: r.quienReporta || 'N/A',
                 tipoProblema: r.tipoProblema || 'N/A',
-                descripcion: r.descripcion, // Pasa la descripción completa para el modal
-                colorClass:
-                  r.status === 'Pendiente' ? 'bg-red-500 text-white' :
-                  r.status === 'En Proceso' ? 'bg-amber-500 text-white' :
-                  r.status === 'Resuelto' ? 'bg-emerald-500 text-white' :
-                  'bg-gray-500 text-white', // Default fallback
+                descripcion: r.descripcion,
+                colorClass: getActivityColorClass(r.status),
               }))
           );
-        } catch (err: any) {
+        } catch (err) {
           clearTimeout(timeoutId);
-          console.error('Error detallado al cargar datos:', err);
-
-          // Mensajes de error más específicos según el tipo de error
-          let errorMessage = 'Error al cargar los datos';
-
-          if (err.name === 'AbortError') {
-            errorMessage = 'La solicitud tardó demasiado tiempo. Por favor, intenta de nuevo.';
-          } else if (err.response) {
-            // El servidor respondió con un código de error
-            if (err.response.status === 500) {
-              errorMessage = 'Error interno del servidor. Por favor, intenta más tarde.';
-            } else if (err.response.status === 401) {
-              errorMessage = 'No autorizado. Por favor, inicia sesión de nuevo.';
-            } else if (err.response.status === 404) {
-              errorMessage = 'Recurso no encontrado. Verifica la configuración.';
-            } else {
-              errorMessage = `Error del servidor: ${err.response.status}`;
-            }
-          } else if (err.request) {
-            // La solicitud se hizo pero no se recibió respuesta
-            errorMessage = 'No se pudo conectar al servidor. Verifica tu conexión a internet.';
-          } else {
-            // Error en la configuración de la solicitud
-            errorMessage = err.message || 'Error desconocido al cargar los datos';
-          }
-
-          setError(errorMessage);
-          // Reinicia los stats a su valor inicial en caso de error
-          setStats([
-            { label: 'Reportes del Mes', value: 'N/A', icon: FileText, color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-50' },
-            { label: 'Reportes Pendientes', value: 'N/A', icon: Clock, color: 'from-amber-500 to-orange-600', bgColor: 'bg-orange-50' },
-            { label: 'Reportes Críticos', value: 'N/A', icon: AlertTriangle, color: 'from-red-600 to-red-700', bgColor: 'bg-red-50' },
-            { label: 'Departamentos Activos', value: 'N/A', icon: Users, color: 'from-emerald-500 to-green-600', bgColor: 'bg-green-50' },
-          ]);
-          setRecentActivity([]);
+          handleApiError(err);
+        } finally {
+          setIsLoading(false);
         }
-        setIsLoading(false);
       } catch (err: any) {
-        // Este bloque catch maneja errores del primer try (autenticación)
+        // This catch block handles errors from the first try (authentication)
         console.error('Error de autenticación:', err);
         setError(err.message || 'Error de autenticación');
         setIsLoading(false);
       }
     };
     fetchData();
-  }, []); // El efecto se ejecuta solo una vez al montar
+  }, []); // Eliminamos las dependencias para evitar el bucle infinito
 
-  const allStatuses = ['todos', ...Array.from(new Set(recentActivity.map(r => r.status)))];
-  const allPriorities = ['todos', ...Array.from(new Set(recentActivity.map(r => r.priority)))];
+  const allStatuses = useMemo(() => ['todos', ...Array.from(new Set(recentActivity.map(r => r.status)))], [recentActivity]);
+  const allPriorities = useMemo(() => ['todos', ...Array.from(new Set(recentActivity.map(r => r.priority)))], [recentActivity]);
 
-  const actividadFiltrada = recentActivity.filter(r =>
-    (filtroEstado === 'todos' || r.status === filtroEstado) &&
-    (filtroPrioridad === 'todos' || r.priority === filtroPrioridad)
-  );
+  const actividadFiltrada = useMemo(() => {
+    return recentActivity.filter(r =>
+      (filtroEstado === 'todos' || r.status === filtroEstado) &&
+      (filtroPrioridad === 'todos' || r.priority === filtroPrioridad)
+    );
+  }, [recentActivity, filtroEstado, filtroPrioridad]);
 
   return (
-    // CAMBIO 1: Fondo general más sofisticado con ondas SVG animadas
     <div className="relative min-h-screen bg-gradient-to-br from-blue-50 via-indigo-100 to-blue-200 font-inter antialiased pt-24 pb-16 overflow-hidden">
       {/* Patrón de ondas SVG estático en el fondo */}
       <div className="absolute inset-x-0 bottom-0 h-96 z-0 overflow-hidden opacity-50">
@@ -274,25 +290,19 @@ const Home: React.FC = () => {
         </svg>
       </div>
 
-
       <div className="relative max-w-7xl mx-auto space-y-16 px-4 sm:px-6 lg:px-8 z-10">
         {/* Encabezado Principal y Logo */}
-        <motion.div // Agregado motion.div para la animación
+        <motion.div
           initial={{ opacity: 0, y: -50 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="text-center bg-white rounded-5xl p-8 sm:p-12 shadow-3xl border border-gray-100 backdrop-blur-md relative overflow-hidden" // Aumentado padding y rounded
+          className="text-center bg-white rounded-5xl p-8 sm:p-12 shadow-3xl border border-gray-100 backdrop-blur-md relative overflow-hidden"
         >
-          <motion.div
-            className="flex justify-center mb-8 z-10 relative"
-          >
+          <motion.div className="flex justify-center mb-8 z-10 relative">
             <img
               src="/Montemorelos.jpg"
               alt="Logo Montemorelos"
-              className="h-36 w-36 sm:h-44 sm:w-44 object-contain rounded-full shadow-2xl p-1
-              bg-gradient-to-tr from-yellow-400 via-orange-500 to-red-500
-              ring-4 ring-yellow-300 ring-opacity-70
-              border-4 border-white" // Borde más grueso
+              className="h-36 w-36 sm:h-44 sm:w-44 object-contain rounded-full shadow-2xl p-1 bg-gradient-to-tr from-yellow-400 via-orange-500 to-red-500 ring-4 ring-yellow-300 ring-opacity-70 border-4 border-white"
             />
           </motion.div>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-700 via-indigo-600 to-purple-600 mb-4 leading-tight tracking-tight drop-shadow-lg">
@@ -301,27 +311,26 @@ const Home: React.FC = () => {
           <p className="text-xl sm:text-2xl text-gray-700 max-w-4xl mx-auto font-medium leading-relaxed sm:leading-loose drop-shadow-sm">
             Optimiza y coordina los procesos del <span className="text-blue-800 font-semibold">Departamento de Sistemas</span> de la Presidencia Municipal de Montemorelos.
           </p>
-          <div
-            className="h-3 mx-auto mt-8 rounded-full bg-gradient-to-r from-blue-400 via-green-300 to-yellow-400 shadow-2xl w-150px" // Mayor altura y sombra
-          ></div>
+          <div className="h-3 mx-auto mt-8 rounded-full bg-gradient-to-r from-blue-400 via-green-300 to-yellow-400 shadow-2xl w-150px"></div>
         </motion.div>
 
         {/* Sección de Indicadores Clave (KPIs) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 mt-16">
           {stats.map((stat, index) => {
             const Icon: React.ElementType = stat.icon;
+            // Extracted priority specific color logic
+            const valueColor = stat.label === 'Reportes Críticos' && stat.value !== 'N/A' && stat.value !== 0 ? 'text-red-700' : 'text-blue-950';
+
             return (
               <motion.div
                 key={stat.label}
                 initial={{ opacity: 0, scale: 0.9, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 + index * 0.1 }}
-                whileHover={{ scale: 1.03, y: -5, boxShadow: "0px 18px 36px rgba(0,0,0,0.18)" }} // Sombra más generosa
-                className={`relative rounded-3xl p-8 shadow-xl border border-white/70 ${stat.bgColor} flex flex-col justify-between transition-all duration-300 overflow-hidden cursor-pointer transform will-change-transform group`} // Añadido `group` para efectos internos
+                whileHover={{ scale: 1.03, y: -5, boxShadow: "0px 18px 36px rgba(0,0,0,0.18)" }}
+                className={`relative rounded-3xl p-8 shadow-xl border border-white/70 ${stat.bgColor} flex flex-col justify-between transition-all duration-300 overflow-hidden cursor-pointer transform will-change-transform group`}
               >
-                {/* Overlay de color más sutil y dinámico al hacer hover */}
                 <div className="absolute inset-0 bg-gradient-to-br from-white via-transparent to-white opacity-0 transform -rotate-12 translate-x-1/2 group-hover:opacity-10 transition-all duration-700 ease-out z-0"></div>
-
                 <div className="flex items-start justify-between z-10">
                   <div>
                     <p className="text-gray-700 text-lg font-semibold flex items-center gap-2 mb-3 group-hover:text-gray-900 transition-colors">
@@ -333,11 +342,10 @@ const Home: React.FC = () => {
                         </span>
                       </span>
                     </p>
-                    <p className={`text-6xl lg:text-7xl font-extrabold text-blue-950 leading-tight transition-colors drop-shadow-xl ${stat.label === 'Reportes Críticos' && stat.value !== 'N/A' && stat.value !== 0 ? 'text-red-700' : ''}`}>
+                    <p className={`text-6xl lg:text-7xl font-extrabold leading-tight transition-colors drop-shadow-xl ${valueColor}`}>
                       {stat.value}
                     </p>
                   </div>
-                  {/* Icono con efecto más dinámico en hover */}
                   <motion.div
                     className={`p-5 rounded-full shadow-lg transform -rotate-12 bg-gradient-to-br ${stat.color} transition-all duration-300 group-hover:scale-115 group-hover:rotate-6`}
                     initial={{ rotate: 0 }}
@@ -361,22 +369,19 @@ const Home: React.FC = () => {
                   initial={{ opacity: 0, y: 40 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.7, delay: 0.2 + index * 0.18 }}
-                  whileHover={{ scale: 1.05, y: -10, boxShadow: "0px 25px 50px rgba(0,0,0,0.2)" }} // Sombra aún más prominente
+                  whileHover={{ scale: 1.05, y: -10, boxShadow: "0px 25px 50px rgba(0,0,0,0.2)" }}
                   whileTap={{ scale: 0.98 }}
                   className={`relative rounded-3xl p-8 sm:p-10 shadow-xl border border-white/60 bg-white/80 backdrop-blur-lg transition-all duration-400 overflow-hidden cursor-pointer hover:border-blue-300`}
                 >
-                  {/* Icono con gradiente y animaciones en hover */}
                   <div className={`bg-gradient-to-r ${action.color} ${action.hoverColor} w-32 h-32 rounded-full flex items-center justify-center mx-auto mb-8 shadow-2xl transition-all duration-500 ease-in-out group-hover:scale-110 group-hover:rotate-6`}>
                     <Icon className="h-16 w-16 text-white transition-transform duration-500 group-hover:rotate-12" />
                   </div>
-                  {/* Títulos y descripciones */}
                   <h3 className="text-3xl sm:text-4xl font-extrabold mb-3 leading-snug tracking-tight drop-shadow-sm transition-colors duration-300" style={{ color: action.textColor }}>
                     {action.title}
                   </h3>
                   <p className="text-gray-700 leading-relaxed text-lg sm:text-xl group-hover:text-gray-900 transition-colors">
                     {action.description}
                   </p>
-                  {/* Decoración sutil inferior */}
                   <div className="absolute -bottom-8 -right-8 w-40 h-40 rounded-full bg-blue-500 opacity-5 blur-xl"></div>
                 </motion.div>
               </Link>
@@ -417,11 +422,14 @@ const Home: React.FC = () => {
           transition={{ duration: 0.6, delay: 1.1 }}
           className="flex flex-col sm:flex-row flex-wrap gap-6 items-center mt-16 bg-white/85 backdrop-blur-xl p-8 rounded-4xl shadow-xl border border-white/70"
         >
-          <label className="text-2xl font-bold text-blue-900 mr-4 flex-shrink-0">Filtros:</label>
+          <label htmlFor="filterStatus" className="text-2xl font-bold text-blue-900 mr-4 flex-shrink-0">Filtros:</label>
           <div className="flex flex-wrap items-center gap-6">
             <div className="relative flex items-center gap-3">
               <span className="text-gray-700 text-lg font-semibold">Estado:</span>
-              <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}
+              <select
+                id="filterStatus"
+                value={filtroEstado}
+                onChange={e => setFiltroEstado(e.target.value)}
                 className="rounded-xl border border-gray-300 bg-gray-50 p-3.5 shadow-sm focus:outline-none focus:ring-3 focus:ring-blue-400 focus:border-blue-400 transition cursor-pointer text-lg text-blue-900 font-medium appearance-none pr-10 hover:shadow-md"
                 style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-chevron-down'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1.2rem' }}
               >
@@ -434,7 +442,10 @@ const Home: React.FC = () => {
             </div>
             <div className="relative flex items-center gap-3">
               <span className="text-gray-700 text-lg font-semibold">Prioridad:</span>
-              <select value={filtroPrioridad} onChange={e => setFiltroPrioridad(e.target.value)}
+              <select
+                id="filterPriority"
+                value={filtroPrioridad}
+                onChange={e => setFiltroPrioridad(e.target.value)}
                 className="rounded-xl border border-gray-300 bg-gray-50 p-3.5 shadow-sm focus:outline-none focus:ring-3 focus:ring-blue-400 focus:border-blue-400 transition cursor-pointer text-lg text-blue-900 font-medium appearance-none pr-10 hover:shadow-md"
                 style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-chevron-down'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1.2rem' }}
               >
@@ -503,54 +514,60 @@ const Home: React.FC = () => {
                     </Link>
                   </div>
                 )}
-                {!isLoading && !error && actividadFiltrada.length > 0 && actividadFiltrada.map((item, index) => (
-                  <motion.div
-                    key={item.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, delay: index * 0.08 }}
-                    whileHover={{ scale: 1.015, boxShadow: "0px 10px 25px rgba(0,0,0,0.15)" }}
-                    className={`flex flex-col md:flex-row md:items-center justify-between p-7 bg-white border border-gray-200 rounded-3xl shadow-lg transition-transform duration-300 cursor-pointer hover:border-blue-300`} // Ajustado padding y redondeado
-                  >
-                    <div className="flex-1 space-y-3 mb-5 md:mb-0">
-                      <div className="flex items-center space-x-4 flex-wrap gap-y-3"> {/* Aumentado gap-y */}
-                        <span className="font-extrabold text-lg text-gray-800 p-2 px-4 bg-blue-100 text-blue-800 rounded-xl shadow-inner transition-colors">
-                          {item.dept}
-                        </span>
-                        <span className={`px-4 py-2 rounded-xl text-sm font-bold shadow-md transition-colors ${
-                          item.priority === 'Crítica' ? 'bg-red-600 text-white' :
-                          item.priority === 'Alta' ? 'bg-orange-500 text-white' :
-                          item.priority === 'Media' ? 'bg-yellow-500 text-gray-900' : // Texto oscuro para yellow
-                          'bg-green-500 text-white'
-                        }`}>
-                          {item.priority}
-                        </span>
-                      </div>
-                      <p className="text-xl sm:text-2xl font-semibold text-gray-900 leading-snug tracking-tight mt-2.5">{item.issue}</p> {/* Más negrita y espaciado */}
-                      <div className="text-sm sm:text-base text-gray-600 space-y-2"> {/* Espaciado en detalle */}
-                        <div className="flex flex-wrap items-center gap-x-3">
-                          <span className="font-bold text-gray-700">ID del Reporte:</span>
-                          <span className="text-blue-600 font-mono text-xs sm:text-sm bg-blue-50 p-1 px-2.5 rounded shadow-sm cursor-text select-all">{item.id}</span> {/* ID completo y copiables */}
+                {!isLoading && !error && actividadFiltrada.length > 0 && actividadFiltrada.map((item, index) => {
+                  // Extracted priority text color logic
+                  const priorityTextColor = () => {
+                    switch (item.priority) {
+                      case 'Crítica': return 'bg-red-600 text-white';
+                      case 'Alta': return 'bg-orange-500 text-white';
+                      case 'Media': return 'bg-yellow-500 text-gray-900';
+                      default: return 'bg-green-500 text-white';
+                    }
+                  };
+                  return (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: index * 0.08 }}
+                      whileHover={{ scale: 1.015, boxShadow: "0px 10px 25px rgba(0,0,0,0.15)" }}
+                      className={`flex flex-col md:flex-row md:items-center justify-between p-7 bg-white border border-gray-200 rounded-3xl shadow-lg transition-transform duration-300 cursor-pointer hover:border-blue-300`}
+                    >
+                      <div className="flex-1 space-y-3 mb-5 md:mb-0">
+                        <div className="flex items-center space-x-4 flex-wrap gap-y-3">
+                          <span className="font-extrabold text-lg text-gray-800 p-2 px-4 bg-blue-100 text-blue-800 rounded-xl shadow-inner transition-colors">
+                            {item.dept}
+                          </span>
+                          <span className={`px-4 py-2 rounded-xl text-sm font-bold shadow-md transition-colors ${priorityTextColor()}`}>
+                            {item.priority}
+                          </span>
                         </div>
-                        <p><span className="font-bold text-gray-700">Reportado por:</span> {item.quienReporta || 'Desconocido'}</p>
-                        <p><span className="font-bold text-gray-700">Tipo de Problema:</span> {item.tipoProblema || 'General'}</p>
-                        <p><span className="font-bold text-gray-700">Fecha y Hora:</span> {item.time || 'N/A'}</p>
+                        <p className="text-xl sm:text-2xl font-semibold text-gray-900 leading-snug tracking-tight mt-2.5">{item.issue}</p>
+                        <div className="text-sm sm:text-base text-gray-600 space-y-2">
+                          <div className="flex flex-wrap items-center gap-x-3">
+                            <span className="font-bold text-gray-700">ID del Reporte:</span>
+                            <span className="text-blue-600 font-mono text-xs sm:text-sm bg-blue-50 p-1 px-2.5 rounded shadow-sm cursor-text select-all">{item.id}</span>
+                          </div>
+                          <p><span className="font-bold text-gray-700">Reportado por:</span> {item.quienReporta || 'Desconocido'}</p>
+                          <p><span className="font-bold text-gray-700">Tipo de Problema:</span> {item.tipoProblema || 'General'}</p>
+                          <p><span className="font-bold text-gray-700">Fecha y Hora:</span> {item.time || 'N/A'}</p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex flex-col sm:flex-row items-center gap-5 flex-shrink-0">
-                      <span className={`px-6 py-2.5 rounded-full text-base font-extrabold shadow-lg min-w-[140px] text-center ${item.colorClass}`}>{item.status}</span> {/* Texto más grande y prominente */}
-                      <motion.button
-                        whileHover={{ scale: 1.15, boxShadow: "0px 8px 20px rgba(0,0,255,0.25)" }}
-                        whileTap={{ scale: 0.9 }}
-                        className="p-3.5 bg-blue-100 hover:bg-blue-200 rounded-full shadow-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300" // Botón un poco más grande
-                        title="Ver detalles"
-                        onClick={() => setDetalleReporte(item)}
-                      >
-                        <Eye className="h-8 w-8 text-blue-700" />
-                      </motion.button>
-                    </div>
-                  </motion.div>
-                ))}
+                      <div className="flex flex-col sm:flex-row items-center gap-5 flex-shrink-0">
+                        <span className={`px-6 py-2.5 rounded-full text-base font-extrabold shadow-lg min-w-[140px] text-center ${item.colorClass}`}>{item.status}</span>
+                        <motion.button
+                          whileHover={{ scale: 1.15, boxShadow: "0px 8px 20px rgba(0,0,255,0.25)" }}
+                          whileTap={{ scale: 0.9 }}
+                          className="p-3.5 bg-blue-100 hover:bg-blue-200 rounded-full shadow-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                          title="Ver detalles"
+                          onClick={() => setDetalleReporte(item)}
+                        >
+                          <Eye className="h-8 w-8 text-blue-700" />
+                        </motion.button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -570,7 +587,7 @@ const Home: React.FC = () => {
                 animate={{ scale: 1, y: 0, opacity: 1 }}
                 exit={{ scale: 0.8, y: -50, opacity: 0 }}
                 transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
-                className="bg-white rounded-3xl shadow-3xl max-w-xl w-full p-8 relative border border-blue-200" // Ajuste de max-width y sombra
+                className="bg-white rounded-3xl shadow-3xl max-w-xl w-full p-8 relative border border-blue-200"
               >
                 <button
                   className="absolute top-4 right-4 text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-300"
@@ -632,32 +649,33 @@ interface DetailItemProps {
 }
 
 const DetailItem: React.FC<DetailItemProps> = ({ label, value, type, isId }) => {
-  let valueClasses = "ml-0 sm:ml-4 text-gray-700 sm:text-right w-full sm:w-auto"; // Alineación para pantallas pequeñas
-  let displayValue = value || 'N/A';
+  const displayValue = value || 'N/A';
+  let valueClasses = "ml-0 sm:ml-4 text-gray-700 sm:text-right w-full sm:w-auto";
 
-  if (isId && typeof value === 'string') {
-    valueClasses += " font-mono text-sm sm:text-base bg-blue-50 px-2 py-1 rounded shadow-sm break-all"; // `break-all` para IDs largos
+  if (isId) {
+    valueClasses += " font-mono text-sm sm:text-base bg-blue-50 px-2 py-1 rounded shadow-sm break-all";
   }
 
-  switch (type) {
-    case 'priority':
-      valueClasses = `sm:ml-4 font-extrabold sm:text-right w-full sm:w-auto ${
-        value === 'Crítica' ? 'text-red-600' :
-        value === 'Alta' ? 'text-orange-500' :
-        value === 'Media' ? 'text-yellow-600' : // Ajuste de color para medio
-        'text-green-600'
-      }`;
-      break;
-    case 'status':
-      valueClasses = `sm:ml-4 font-extrabold sm:text-right w-full sm:w-auto ${
-        value === 'Pendiente' ? 'text-red-500' :
-        value === 'En Proceso' ? 'text-amber-600' :
-        value === 'Resuelto' ? 'text-emerald-600' :
-        'text-gray-500'
-      }`;
-      break;
-    default:
-      break;
+  // Refactored nested ternary operations into a separate function/variable for clarity
+  const getValueColorClass = (itemType: 'priority' | 'status' | undefined, itemValue: string | number | undefined | null): string => {
+    switch (itemType) {
+      case 'priority':
+        if (itemValue === 'Crítica') return 'text-red-600';
+        if (itemValue === 'Alta') return 'text-orange-500';
+        if (itemValue === 'Media') return 'text-yellow-600';
+        return 'text-green-600';
+      case 'status':
+        if (itemValue === 'Pendiente') return 'text-red-500';
+        if (itemValue === 'En Proceso') return 'text-amber-600';
+        if (itemValue === 'Resuelto') return 'text-emerald-600';
+        return 'text-gray-500';
+      default:
+        return 'text-gray-700'; // Default for non-priority/status items
+    }
+  };
+
+  if (type) {
+    valueClasses = `sm:ml-4 font-extrabold sm:text-right w-full sm:w-auto ${getValueColorClass(type, value)}`;
   }
 
   return (
@@ -668,5 +686,9 @@ const DetailItem: React.FC<DetailItemProps> = ({ label, value, type, isId }) => 
   );
 };
 
+// Función de ejemplo para usar axios con AxiosRequestConfig
+
+// Nota: Esta función no se llama automáticamente para evitar errores en la carga
+// Se puede llamar manualmente cuando sea necesario con: fetchData();
 
 export default Home;

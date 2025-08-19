@@ -152,6 +152,11 @@ const Profile: React.FC = (): JSX.Element => {
     try {
       // Guardar en localStorage para persistencia básica
       localStorage.setItem('usuario', JSON.stringify(data));
+      
+      // Notificar al contexto de autenticación sobre los cambios
+      if (setUsuario) {
+        setUsuario(data);
+      }
 
       // Guardar en el backend en tiempo real
       if (edit && data.email) {
@@ -173,7 +178,7 @@ const Profile: React.FC = (): JSX.Element => {
       console.error('Error al guardar datos en tiempo real:', error);
       showThemedToast('Error al guardar cambios', 'error');
     }
-  }, [edit, updateUserProfile]);
+  }, [edit, updateUserProfile, setUsuario]);
 
   // Efecto para la carga inicial de datos del usuario y configuración del temporizador
   useEffect(() => {
@@ -478,7 +483,7 @@ const Profile: React.FC = (): JSX.Element => {
         if (setUsuario) {
           // Asegurarse de que el rol se mantenga correctamente en el contexto
           const rolActual = usuario?.rol;
-          setUsuario({
+          const updatedUserData = {
             ...updatedUser,
             rol: rolActual,
             // Mantener las propiedades de manipulación de foto que no se guardan en el backend
@@ -486,18 +491,15 @@ const Profile: React.FC = (): JSX.Element => {
             fotoRotation: rotation,
             fotoPositionX: position.x,
             fotoPositionY: position.y,
-          }); // Actualiza contexto de autenticación
+          };
+          
+          // Actualizar contexto de autenticación
+          setUsuario(updatedUserData);
+          
+          // Guardar en localStorage con todas las propiedades
+          localStorage.setItem('usuario', JSON.stringify(updatedUserData));
         }
       }, 0);
-      // Guardar en localStorage con todas las propiedades
-      localStorage.setItem('usuario', JSON.stringify({
-        ...updatedUser,
-        rol: usuario?.rol,
-        fotoZoom: zoomLevel,
-        fotoRotation: rotation,
-        fotoPositionX: position.x,
-        fotoPositionY: position.y,
-      }));
 
       showThemedToast('Perfil actualizado y guardado correctamente.', 'success');
     } catch (err: any) {

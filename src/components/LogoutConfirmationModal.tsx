@@ -2,6 +2,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react'; // Usamos LogOut para el botón
+import toast from 'react-hot-toast';
 
 interface LogoutConfirmationModalProps {
   isOpen: boolean;
@@ -62,7 +63,22 @@ const LogoutConfirmationModal: React.FC<LogoutConfirmationModalProps> = ({ isOpe
               <motion.button
                 whileHover={{ scale: 1.02 }} // Escala un poco al pasar el ratón
                 whileTap={{ scale: 0.98 }}   // Ligera escala al hacer clic
-                onClick={onConfirm}
+                onClick={() => {
+                  // Mostrar notificación de despedida
+                  toast.success('¡Hasta pronto! Tu sesión ha sido cerrada correctamente.', {
+                    duration: 4000,
+                    position: 'top-center',
+                    style: {
+                      background: '#f97316',
+                      color: '#fff',
+                      fontWeight: 'bold',
+                      padding: '16px',
+                      borderRadius: '8px',
+                      fontSize: '16px',
+                    },
+                  });
+                  onConfirm();
+                }}
                 className={`${btnLogoutImageStyle}`}
               >
                 Cerrar sesión

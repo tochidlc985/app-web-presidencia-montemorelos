@@ -12,10 +12,10 @@ import Register from './pages/Register';
 import Profile from './pages/Profile';
 import Home from './pages/Home';
 import ProtectedRoute from './components/ProtectedRoute';
-import { AuthProvider, useAuth } from './context/AuthContext'; // Importaciones necesarias
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Logout from './pages/Logout';
 
-function App() {
+const App = () => {
   return (
     <Router>
       <AuthProvider>
@@ -33,22 +33,40 @@ function App() {
       />
     </Router>
   );
-}
+};
 
 const AppContent: React.FC = () => {
   const { isLoggedIn, isLoading } = useAuth();
 
   // Evitar problemas de hidratación en SSR
   const [isClient, setIsClient] = React.useState(false);
+  const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+  
   React.useEffect(() => {
     setIsClient(true);
   }, []);
+  
+  React.useEffect(() => {
+    if (isClient) {
+      // Reducir el tiempo de espera para la verificación de autenticación
+      setTimeout(() => {
+        setIsAuthenticated(isLoggedIn());
+      }, 300);
+    }
+  }, [isClient, isLoggedIn]);
 
   if (!isClient || isLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">Cargando...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+          <p className="text-blue-600 font-medium">Cargando aplicación...</p>
+        </div>
+      </div>
+    );
   }
 
-  if (!isLoggedIn()) {
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
         <Routes>

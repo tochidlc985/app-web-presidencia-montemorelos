@@ -4,6 +4,11 @@ import { ADJUSTED_API_BASE_URL, API_BASE_URL } from './services/apiConfig';
 // Usar URL ajustada para todas las solicitudes
 const api = axios.create({
   baseURL: ADJUSTED_API_BASE_URL || API_BASE_URL,
+  timeout: 30000, // Añadir timeout para evitar peticiones colgadas (aumentado a 30 segundos)
+  withCredentials: true, // Importante para CORS y cookies
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
 api.interceptors.request.use(
@@ -24,9 +29,18 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Opcional: Redirigir al login si el token no es válido
-      // window.location.href = '/login';
+      // Redirigir al login si el token no es válido
+      localStorage.removeItem('token');
+      localStorage.removeItem('usuario');
+      window.location.href = '/login';
     }
+    
+    // Mejorar el manejo de errores de red
+    if (error.code === 'ECONNABORTED' || error.message === 'Network Error') {
+      console.error('Error de conexión:', error.message);
+      error.message = 'Error de conexión. Por favor, verifica tu conexión a internet.';
+    }
+    
     return Promise.reject(error);
   }
 );

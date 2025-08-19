@@ -62,6 +62,11 @@ const Login: React.FC = () => {
       if (resData.token) {
         localStorage.setItem('token', resData.token);
         console.log('Token guardado en localStorage');
+        
+        // Establecer la fecha de expiración del token (8 horas desde ahora)
+        const expiryDate = new Date();
+        expiryDate.setHours(expiryDate.getHours() + 8);
+        localStorage.setItem('token_expiry', expiryDate.getTime().toString());
       }
       if (resData.usuario) {
         const usuarioCompleto = {
@@ -77,14 +82,44 @@ const Login: React.FC = () => {
         };
 
         localStorage.setItem('usuario', JSON.stringify(usuarioCompleto));
-        window.dispatchEvent(new Event('storage')); // Notifica a otros componentes (ej. AuthContext) del cambio
+        
+        // Forzar la actualización del contexto de autenticación
+        window.dispatchEvent(new Event('storage'));
+        // También forzar una recarga del estado del usuario
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
       }
 
       toast.success('¡Bienvenido! Redirigiendo...');
-      window.location.href = '/home';
+      // Forzar una recarga completa para asegurar que el contexto de autenticación se actualice
+      setTimeout(() => {
+        window.location.href = '/home';
+      }, 1000);
     } catch (err: any) {
-      setError(err.message);
-      toast.error(err.message);
+      // Mejorar el manejo de errores para proporcionar mensajes más claros
+      let errorMessage = 'Error al iniciar sesión';
+      
+      if (err.response) {
+        // El servidor respondió con un código de error
+        if (err.response.status === 401) {
+          errorMessage = 'Credenciales inválidas. Por favor, verifica tu email y contraseña.';
+        } else if (err.response.status === 500) {
+          errorMessage = 'Error interno del servidor. Por favor, intenta más tarde.';
+        } else {
+          errorMessage = err.response.data?.message || 'Error al iniciar sesión';
+        }
+      } else if (err.request) {
+        // La solicitud se hizo pero no se recibió respuesta
+        errorMessage = 'No se pudo conectar al servidor. Verifica tu conexión a internet.';
+      } else if (err.message === 'Network Error') {
+        errorMessage = 'Error de red. Por favor, verifica tu conexión a internet.';
+      } else {
+        errorMessage = err.message || 'Error al iniciar sesión';
+      }
+      
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }

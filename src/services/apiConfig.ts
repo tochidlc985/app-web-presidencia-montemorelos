@@ -1,26 +1,27 @@
-// Configuración centralizada de la API
-const isProduction = import.meta.env.PROD;
+// Configuración centralizada de la API - Simplificada y consistente
 
-// URL base para la API
-export const API_BASE_URL = isProduction ? '/api' : 'http://localhost:4000';
+// URL base para la API - siempre usa /api para rutas relativas
+export const API_BASE_URL = '/api';
 
-// URL absoluta para uso en dispositivos móviles y casos especiales
-export const ABSOLUTE_API_BASE_URL = isProduction
-  ? (typeof window !== 'undefined' ? `${window.location.origin}/api` : '')
-  : 'http://localhost:4000';
+// URL absoluta para casos especiales
+export const ABSOLUTE_API_BASE_URL = typeof window !== 'undefined' 
+  ? `${window.location.origin}/api` 
+  : '/api';
 
-// URL para Vercel - asegura que las peticiones API se dirijan correctamente
-export const VERCEL_API_BASE_URL = isProduction
-  ? '' // En Vercel, las rutas /api se manejan automáticamente
-  : 'http://localhost:4000';
+// URL ajustada para evitar problemas
+export const ADJUSTED_API_BASE_URL = '/api';
 
-// URL ajustada para evitar problemas con rutas duplicadas
-export const ADJUSTED_API_BASE_URL = isProduction ? '' : API_BASE_URL;
-
+// Endpoints de la API
 export const API_ENDPOINTS = {
-  LOGIN: '/api/login',
-  REGISTER: '/api/register',
-  REPORTES: '/api/reportes',
-  PERFIL: '/api/perfil',
-  ESTADISTICAS: '/api/estadisticas'
+  LOGIN: '/login',
+  REGISTER: '/register',
+  REPORTES: '/reportes',
+  PERFIL: '/perfil',
+  ESTADISTICAS: '/estadisticas',
+  COLONIAS: '/colonias'
+};
+
+// Función para obtener la URL completa de un endpoint
+export const getFullUrl = (endpoint: string) => {
+  return `${API_BASE_URL}${endpoint}`;
 };

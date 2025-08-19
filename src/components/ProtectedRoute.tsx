@@ -23,7 +23,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   React.useEffect(() => {
     // Verificar autorización solo en el cliente
     if (isClient) {
-      if (!isLoggedIn()) {
+      const isAuthenticated = isLoggedIn();
+      if (!isAuthenticated) {
         setIsAuthorized(false);
         return;
       }

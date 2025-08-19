@@ -1,27 +1,33 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom'],
+    exclude: ['lucide-react'],
   },
   server: {
     host: '0.0.0.0', // Permite acceso desde dispositivos externos en la red
     port: 5713,      // Especifica el puerto en el que se ejecutará el servidor localmente
-    strictPort: true, // Asegura que el puerto no cambie si está ocupado
+    strictPort: false, // Permite que Vite busque otro puerto si el especificado está ocupado
     proxy: {
       '/api': {
         target: 'http://localhost:4000',
         changeOrigin: true,
-        secure: false
+        secure: false,
+        rewrite: (path) => path,
+        configure: (proxy, _options) => {
+          proxy.on('error', (err, _req, _res) => {
+            console.log('proxy error', err);
+          });
+          proxy.on('proxyReq', (_proxyReq, req, _res) => {
+            console.log('Sending Request to the Target:', req.method, req.url);
+          });
+          proxy.on('proxyRes', (proxyRes, req, _res) => {
+            console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
+          });
+        },
       },
     },
   },
@@ -29,13 +35,5 @@ export default defineConfig({
     outDir: 'dist',
     assetsDir: 'assets',
     sourcemap: false,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          router: ['react-router-dom'],
-        },
-      },
-    },
   },
 });
