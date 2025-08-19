@@ -161,7 +161,13 @@ app.get('*', (req, res) => {
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
   } else {
-    res.status(404).json({ message: 'Not found' });
+    // Si no existe el archivo index.html en dist, intentar servir el index.html de la carpeta public
+    const publicIndexPath = path.join(__dirname, 'public', 'index.html');
+    if (fs.existsSync(publicIndexPath)) {
+      res.sendFile(publicIndexPath);
+    } else {
+      res.status(404).json({ message: 'Not found' });
+    }
   }
 });
 
