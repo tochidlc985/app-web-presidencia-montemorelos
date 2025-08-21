@@ -18,6 +18,7 @@ import {
 import { API_ENDPOINTS } from '../services/apiConfig';
 import api from '../api';
 import { AxiosRequestConfig } from 'axios';
+import { useRealtime } from '../services/realtimeService';
 
 
 // Interfaz para el tipo de Reporte original desde la API

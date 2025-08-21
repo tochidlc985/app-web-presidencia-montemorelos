@@ -394,15 +394,95 @@ const Dashboard: React.FC = () => {
     return Object.keys(diasMap).map(dia => ({ dia, reportes: diasMap[dia] }));
   }, [reportesFiltrados]);
 
+  // Estado para auto-guardado
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
+
   // Manejador de edición en línea
   const handleEditClick = useCallback((report: Reporte) => {
     setEditRowId(report._id);
     setEditData({ ...report }); // Clonar el objeto reporte para edición
+    setAutoSaveStatus('idle');
   }, []);
 
   const handleEditChange = useCallback((field: keyof Reporte, value: any) => {
     setEditData(prev => ({ ...prev, [field]: value }));
-  }, []);
+
+    // Configurar auto-guardado después de 2 segundos de inactividad
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+    }
+
+    setAutoSaveStatus('idle');
+    const timer = setTimeout(() => {
+      if (editRowId) {
+        handleAutoSave(editRowId);
+      }
+    }, 2000);
+
+    setAutoSaveTimer(timer);
+  }, [autoSaveTimer, editRowId]);
+
+  // Función para auto-guardar cambios
+  const handleAutoSave = useCallback(async (reportId: string) => {
+    const currentReport = reportes.find(r => r._id === reportId);
+    if (!currentReport) {
+      setAutoSaveStatus('error');
+      return;
+    }
+
+    // Obtener solo los campos que han sido modificados para enviar
+    const updatedFields: Partial<Reporte> = {};
+    Object.keys(editData).forEach(key => {
+        const field = key as keyof Reporte;
+        if (field === 'departamento') {
+          // Special handling for array field 'departamento'
+          const currentDepArray = (currentReport.departamento || []).sort();
+          const editedDepArray = (editData.departamento as string[] || []).sort();
+          if (!arraysEqual(currentDepArray, editedDepArray)) {
+              updatedFields.departamento = editedDepArray; // Set the sorted array for update
+          }
+        } else if (String(editData[field]) !== String(currentReport[field])) { // General comparison for other fields
+            updatedFields[field] = editData[field];
+        }
+    });
+
+    if (Object.keys(updatedFields).length === 0) {
+      setAutoSaveStatus('idle');
+      return;
+    }
+
+    try {
+      setAutoSaveStatus('saving');
+      const token = localStorage.getItem('token');
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+
+      // Convertir `departamento` a un array de strings si es necesario (cuando viene de input)
+      if (updatedFields.departamento !== undefined && typeof updatedFields.departamento === 'string') {
+        updatedFields.departamento = (updatedFields.departamento as string).split(',').map(d => d.trim()).filter(Boolean);
+      } else if (Array.isArray(updatedFields.departamento)) {
+        // Asegurar que si ya es un array, se limpia y se hace trim a cada elemento
+        updatedFields.departamento = (updatedFields.departamento as string[]).map(d => d.trim()).filter(Boolean);
+      }
+
+      // AsignadoA a undefined si es vacío
+      if (updatedFields.asignadoA === '') {
+        updatedFields.asignadoA = undefined;
+      }
+
+      await api.patch(`${API_ENDPOINTS.REPORTES}/${reportId}`, updatedFields, config);
+      setAutoSaveStatus('saved');
+
+      // Actualizar el reporte en el estado local
+      setReportes(prev => prev.map(r => r._id === reportId ? { ...r, ...updatedFields } : r));
+
+      // Después de 3 segundos, volver el estado a idle
+      setTimeout(() => setAutoSaveStatus('idle'), 3000);
+    } catch (err: any) {
+      console.error('Error al auto-guardar reporte:', err.response?.data || err.message);
+      setAutoSaveStatus('error');
+    }
+  }, [reportes, editData]);
 
   const handleSaveEdit = useCallback(async (reportId: string) => {
     const currentReport = reportes.find(r => r._id === reportId);
@@ -454,7 +534,7 @@ const Dashboard: React.FC = () => {
         updatedFields.asignadoA = undefined;
       }
       
-      await api.patch(`/api/reportes/${reportId}`, updatedFields, config);
+      await api.patch(`${API_ENDPOINTS.REPORTES}/${reportId}`, updatedFields, config);
       showThemedToast('Reporte actualizado con éxito.', 'success');
       
       setReportes(prev => prev.map(r => r._id === reportId ? { ...r, ...updatedFields } : r));
@@ -487,7 +567,7 @@ const Dashboard: React.FC = () => {
     try {
       const token = localStorage.getItem('token');
       const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-      await api.delete(`/api/reportes/${id}`, config);
+      await api.delete(`${API_ENDPOINTS.REPORTES}/${id}`, config);
       showThemedToast('Reporte eliminado correctamente.', 'success');
     } catch (err: any) {
       console.error('Error al eliminar:', err);
@@ -565,7 +645,7 @@ const Dashboard: React.FC = () => {
           try {
             const token = localStorage.getItem('token');
             const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-            await api.post('/api/reportes', rep, config);
+            await api.post(API_ENDPOINTS.REPORTES, rep, config);
             successCount++;
           } catch (error) {
             console.error('Error uploading:', rep, error);
@@ -1116,6 +1196,30 @@ const Dashboard: React.FC = () => {
               <FileText className="h-8 w-8 text-yellow-300" />
               Detalle de Reportes
             </h3>
+            <div className="flex flex-wrap justify-between md:justify-end gap-3 w-full">
+            {/* Indicador de auto-guardado */}
+            {editRowId && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                {autoSaveStatus === 'saving' && (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-blue-300" />
+                    <span className="text-blue-300 text-sm font-medium">Guardando...</span>
+                  </>
+                )}
+                {autoSaveStatus === 'saved' && (
+                  <>
+                    <CheckCircle className="h-4 w-4 text-green-300" />
+                    <span className="text-green-300 text-sm font-medium">Guardado</span>
+                  </>
+                )}
+                {autoSaveStatus === 'error' && (
+                  <>
+                    <AlertTriangle className="h-4 w-4 text-red-300" />
+                    <span className="text-red-300 text-sm font-medium">Error al guardar</span>
+                  </>
+                )}
+              </div>
+            )}
             <div className="flex flex-wrap justify-center md:justify-end gap-3">
               <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={exportarCSV} className={`${btnInfo} text-white flex items-center gap-2 text-base py-2.5 px-5 rounded-xl`}>
                 <DownloadCloud className="h-5 w-5" /> CSV
@@ -1132,6 +1236,7 @@ const Dashboard: React.FC = () => {
                 <input type="file" accept=".json" onChange={importarJSON} className="hidden" />
               </label>
             </div>
+          </div>
           </div>
 
           {/* Contenedor con scroll horizontal para la tabla */}
@@ -1177,7 +1282,8 @@ const Dashboard: React.FC = () => {
                       transition={{ delay: idx * 0.05, duration: 0.3 }}
                       className={
                         (idx % 2 === 0 ? 'bg-white' : 'bg-blue-50') +
-                        ' hover:bg-blue-100 hover:shadow-sm transition-all duration-300 transform-gpu' // Removido cursor-pointer si es editable
+                        ' hover:bg-blue-100 hover:shadow-sm transition-all duration-300 transform-gpu ' + // Removido cursor-pointer si es editable
+                        (editRowId === r._id ? 'ring-2 ring-blue-400 ring-opacity-70 bg-blue-100/30 shadow-md' : '')
                       }
                     >
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-900 font-semibold">
@@ -1203,11 +1309,13 @@ const Dashboard: React.FC = () => {
                               rows={2}
                               value={editData.descripcion || ''}
                               onChange={(e) => handleEditChange('descripcion', e.target.value)}
-                              className={`${glassInput} text-sm w-full resize-y py-2 px-3 text-gray-900 focus:ring-blue-500 border-blue-300 focus:ring-4`}
+                              className={`${glassInput} text-sm w-full resize-y py-2 px-3 text-gray-900 focus:ring-blue-500 border-blue-300 focus:ring-4 transition-all duration-200`}
+                              placeholder="Ingrese una descripción detallada..."
                               aria-label={`Descripción de reporte ${r._id.substring(0, 8)}`}
+                              autoFocus
                             />
                         ) : (
-                            <span className="cursor-pointer line-clamp-2" onClick={() => handleEditClick(r)}>{r.descripcion}</span>
+                            <span className="cursor-pointer line-clamp-2 hover:text-blue-600 transition-colors duration-200" onClick={() => handleEditClick(r)}>{r.descripcion}</span>
                         )}
                       </td>
                       <td className="px-6 py-4 text-sm">
@@ -1293,9 +1401,16 @@ const Dashboard: React.FC = () => {
                                 <motion.button
                                   type="button"
                                   whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.95 }}
-                                  onClick={() => handleSaveEdit(r._id)}
+                                  onClick={() => {
+                                    // Cancelar cualquier auto-guardado pendiente
+                                    if (autoSaveTimer) {
+                                      clearTimeout(autoSaveTimer);
+                                      setAutoSaveTimer(null);
+                                    }
+                                    handleSaveEdit(r._id);
+                                  }}
                                   className="p-2 rounded-full border border-green-300 bg-green-100 text-green-700 hover:bg-green-200 hover:text-green-800 shadow-md transition-all"
-                                  title="Guardar cambios"
+                                  title="Guardar cambios manualmente"
                                   aria-label={`Guardar cambios para reporte ${r._id.substring(0, 8)}`}
                                 >
                                     <Save className="w-5 h-5" />
@@ -1303,7 +1418,14 @@ const Dashboard: React.FC = () => {
                                 <motion.button
                                   type="button"
                                   whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.95 }}
-                                  onClick={handleCancelEdit}
+                                  onClick={() => {
+                                    // Cancelar cualquier auto-guardado pendiente
+                                    if (autoSaveTimer) {
+                                      clearTimeout(autoSaveTimer);
+                                      setAutoSaveTimer(null);
+                                    }
+                                    handleCancelEdit();
+                                  }}
                                   className="p-2 rounded-full border border-gray-300 bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-gray-800 shadow-md transition-all"
                                   title="Cancelar edición"
                                   aria-label={`Cancelar edición para reporte ${r._id.substring(0, 8)}`}
@@ -1326,9 +1448,9 @@ const Dashboard: React.FC = () => {
                                 <motion.button
                                   type="button"
                                   whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.95 }}
-                                  onClick={() => handleEditClick(r)} // Usar handleEditClick
+                                  onClick={() => handleEditClick(r)}
                                   className="p-2 rounded-full border border-blue-300 bg-blue-100 text-blue-700 hover:bg-blue-200 hover:text-blue-800 shadow-md transition-all group"
-                                  title="Editar reporte"
+                                  title="Editar reporte (se guardará automáticamente)"
                                   aria-label={`Editar reporte ${r._id.substring(0, 8)}`}
                                 >
                                     <Pencil className="w-5 h-5" />
