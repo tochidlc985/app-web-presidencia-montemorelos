@@ -116,7 +116,9 @@ function requireRole(role) {
     const token = auth.split(' ')[1];
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      if (decoded.rol !== role) return res.status(403).json({ message: 'Permiso denegado' });
+      // Verificar si tiene el rol requerido (compatible con array o string)
+      const userRoles = Array.isArray(decoded.roles) ? decoded.roles : [decoded.roles || decoded.rol];
+      if (!userRoles.includes(role)) return res.status(403).json({ message: 'Permiso denegado' });
       req.user = decoded;
       next();
     } catch (err) {
@@ -173,7 +175,7 @@ app.get('/api/reportes', async (req, res) => {
 });
 
 // Actualizar estado o prioridad del reporte
-app.patch('/reportes/:id', requireRole('administrador'), async (req, res) => {
+app.patch('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
   try {
     const { id } = req.params;
     const update = req.body;
@@ -189,7 +191,7 @@ app.patch('/reportes/:id', requireRole('administrador'), async (req, res) => {
 });
 
 // Eliminar reporte (solo admin) y borrar imágenes asociadas
-app.delete('/reportes/:id', requireRole('administrador'), async (req, res) => {
+app.delete('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
   try {
     const { id } = req.params;
     // Obtener reporte antes de eliminar
@@ -281,14 +283,86 @@ app.get('/api/perfil/:email', async (req, res) => {
 // Actualizar perfil de usuario
 app.put('/api/perfil/:email', async (req, res) => {
   try {
+    console.log(`Intentando actualizar perfil para email: ${req.params.email}`);
+    console.log('Datos a actualizar:', JSON.stringify(req.body, null, 2));
+
     const ok = await db.actualizarPerfilUsuario(req.params.email, req.body);
     if (ok) {
-      res.json({ message: 'Perfil actualizado correctamente' });
+      console.log(`Perfil actualizado correctamente para email: ${req.params.email}`);
+
+      // Obtener el perfil actualizado para devolverlo
+      try {
+        const perfilActualizado = await db.buscarPerfilPorEmail(req.params.email);
+        res.json({ 
+          message: 'Perfil actualizado correctamente', 
+          usuario: perfilActualizado 
+        });
+      } catch (error) {
+        // Si hay error al obtener el perfil actualizado, devolver los datos originales
+        console.warn(`No se pudo obtener el perfil actualizado para ${req.params.email}, devolviendo datos originales`);
+        res.json({ 
+          message: 'Perfil actualizado correctamente', 
+          usuario: req.body 
+        });
+      }
+    } else {
+      console.log(`No se encontró perfil para email: ${req.params.email}`);
+      res.status(404).json({ message: 'Perfil no encontrado' });
+    }
+  } catch (error) {
+    console.error(`Error al actualizar perfil para email: ${req.params.email}:`, error);
+    res.status(500).json({ message: 'Error al actualizar perfil', error: error.message });
+  }
+});
+
+// Subir foto de perfil
+app.post('/api/perfil/:email/foto', upload.single('foto'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No se proporcionó ninguna imagen' });
+    }
+
+    const fotoUrl = `/uploads/${req.file.filename}`;
+    const ok = await db.actualizarPerfilUsuario(req.params.email, { foto: fotoUrl });
+
+    if (ok) {
+      res.json({ message: 'Foto de perfil subida correctamente', fotoUrl });
     } else {
       res.status(404).json({ message: 'Perfil no encontrado' });
     }
   } catch (error) {
-    res.status(500).json({ message: 'Error al actualizar perfil', error: error.message });
+    res.status(500).json({ message: 'Error al subir foto de perfil', error: error.message });
+  }
+});
+
+// Eliminar foto de perfil
+app.delete('/api/perfil/:email/foto', async (req, res) => {
+  try {
+    // Obtener el perfil actual para saber qué foto eliminar
+    const perfil = await db.buscarPerfilPorEmail(req.params.email);
+
+    if (!perfil) {
+      return res.status(404).json({ message: 'Perfil no encontrado' });
+    }
+
+    // Si hay una foto, eliminar el archivo
+    if (perfil.foto && perfil.foto.startsWith('/uploads/')) {
+      const fotoPath = path.join(uploadDir, perfil.foto.replace('/uploads/', ''));
+      if (fs.existsSync(fotoPath)) {
+        fs.unlinkSync(fotoPath);
+      }
+    }
+
+    // Actualizar el perfil para eliminar la referencia a la foto
+    const ok = await db.actualizarPerfilUsuario(req.params.email, { foto: null });
+
+    if (ok) {
+      res.json({ message: 'Foto de perfil eliminada correctamente' });
+    } else {
+      res.status(404).json({ message: 'Perfil no encontrado' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Error al eliminar foto de perfil', error: error.message });
   }
 });
 

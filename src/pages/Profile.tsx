@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { User, Mail, Building, Shield, Calendar, Camera, XCircle, Home, Edit2, CheckCircle, Clock, HelpCircle, ZoomIn, ZoomOut, RotateCcw, Download, Share2, AlertCircle, Info, QrCode, Tag } from 'lucide-react'; // Agregué Tag para los roles
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast'; // Importar react-hot-toast directamente
+import { getUserProfile, updateUserProfile as updateUserProfileService, uploadProfilePhoto, deleteProfilePhoto } from '../services/profileService';
 
 // region: Interfaces y Configuración
 
@@ -126,6 +127,62 @@ const updateUserProfile = async (userData: Usuario): Promise<Usuario> => {
   }
 };
 
+// Función para guardar los datos del usuario en tiempo real
+const saveUserDataInRealTime = async (userData: Usuario): Promise<Usuario> => {
+  // Definir payload fuera del bloque try para que esté accesible en el bloque catch
+  let payload: Usuario = { ...userData };
+
+  try {
+    if (!userData.email) {
+      throw new Error('El email del usuario es requerido para actualizar el perfil');
+    }
+
+    // Eliminar propiedades que no deben enviarse al backend
+    delete payload.fotoZoom;
+    delete payload.fotoRotation;
+    delete payload.fotoPositionX;
+    delete payload.fotoPositionY;
+
+    // Asegurarse de que tenemos los campos necesarios
+    if (!payload.nombre) {
+      payload.nombre = payload.email?.split('@')[0] || 'Usuario';
+    }
+
+    console.log('Intentando guardar perfil para:', payload.email);
+
+    // Llamar al servicio para actualizar el perfil
+    const updatedUser = await updateUserProfileService(payload);
+    console.log('Perfil guardado exitosamente');
+    return updatedUser;
+  } catch (error: any) {
+    console.error('Error al guardar datos en tiempo real:', error);
+
+    // Si el error es 404 (perfil no encontrado), intentar crear un nuevo perfil
+    if (error.message && error.message.includes('404')) {
+      console.log('Perfil no encontrado, intentando crear uno nuevo...');
+      try {
+        // Asegurarse de que tenemos los campos necesarios para crear un usuario
+        const basePayload = payload || userData;
+        const newUserPayload = {
+          ...basePayload,
+          nombre: basePayload.nombre || basePayload.email?.split('@')[0] || 'Usuario',
+          email: basePayload.email,
+          rol: basePayload.rol || 'usuario'
+        };
+
+        const updatedUser = await updateUserProfileService(newUserPayload);
+        console.log('Nuevo perfil creado exitosamente');
+        return updatedUser;
+      } catch (createError: any) {
+        console.error('Error al crear nuevo perfil:', createError);
+        throw createError;
+      }
+    }
+
+    throw error;
+  }
+};
+
 // endregion: Interfaces y Configuración
 
 const Profile: React.FC = (): JSX.Element => {
@@ -138,7 +195,7 @@ const Profile: React.FC = (): JSX.Element => {
   const [fotoPreview, setFotoPreview] = useState<string | null>(null); // URL/Base64 para previsualización de la foto
   const [tiempoActivo, setTiempoActivo] = useState({ dias: 0, horas: 0, minutos: 0, segundos: 0 }); // Tiempo de la cuenta activa
   const [mostrarPreguntas, setMostrarPreguntas] = useState(false); // Toggle de FAQs
-  const [] = useState(false); // Nuevo estado para controlar el guardado
+  const [isSaving, setIsSaving] = useState(false); // Nuevo estado para controlar el guardado
   
   // Estados para manipulación de la imagen
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -153,9 +210,12 @@ const Profile: React.FC = (): JSX.Element => {
       // Guardar en localStorage para persistencia básica
       localStorage.setItem('usuario', JSON.stringify(data));
       
-      // Notificar al contexto de autenticación sobre los cambios
+      // Notificar al contexto de autenticación sobre los cambios de forma asíncrona
       if (setUsuario) {
-        setUsuario(data);
+        // Usar setTimeout para evitar actualizar el estado durante el renderizado
+        setTimeout(() => {
+          setUsuario(data);
+        }, 0);
       }
 
       // Guardar en el backend en tiempo real
@@ -167,7 +227,7 @@ const Profile: React.FC = (): JSX.Element => {
           delete payload.fotoPositionX;
           delete payload.fotoPositionY;
 
-          await updateUserProfile(payload);
+          await saveUserDataInRealTime(payload);
           showThemedToast('Cambios guardados automáticamente', 'success');
         } catch (apiError: any) {
           console.error('Error al guardar en el backend:', apiError);
@@ -178,7 +238,7 @@ const Profile: React.FC = (): JSX.Element => {
       console.error('Error al guardar datos en tiempo real:', error);
       showThemedToast('Error al guardar cambios', 'error');
     }
-  }, [edit, updateUserProfile, setUsuario]);
+  }, [edit, setUsuario]);
 
   // Efecto para la carga inicial de datos del usuario y configuración del temporizador
   useEffect(() => {
@@ -202,6 +262,32 @@ const Profile: React.FC = (): JSX.Element => {
             localStorage.removeItem('usuario');
           }
         }
+      }
+
+      // Intentar obtener los datos más recientes del servidor
+      try {
+        const serverUserData = await getUserProfile();
+        // Combinar datos del servidor con datos locales (priorizando los del servidor)
+        initialUserData = {
+          ...initialUserData,
+          ...serverUserData,
+          // Mantener propiedades de manipulación de foto que no están en el servidor
+          fotoZoom: initialUserData?.fotoZoom || 1,
+          fotoRotation: initialUserData?.fotoRotation || 0,
+          fotoPositionX: initialUserData?.fotoPositionX || 0,
+          fotoPositionY: initialUserData?.fotoPositionY || 0
+        };
+        
+        // Actualizar el contexto con los datos del servidor
+        if (setUsuario) {
+          setUsuario(initialUserData);
+        }
+        
+        // Guardar en localStorage
+        localStorage.setItem('usuario', JSON.stringify(initialUserData));
+      } catch (error) {
+        console.error('Error al obtener datos del servidor:', error);
+        // Si hay un error, usar los datos locales
       }
 
       // Resto del código de carga...
@@ -297,9 +383,12 @@ const Profile: React.FC = (): JSX.Element => {
     setForm(prevForm => {
         const newForm = { ...prevForm, [name]: updatedValue };
         if (edit) {
-            saveUserDataLocally(newForm).catch(error => {
-              console.error('Error en autoguardado:', error);
-            });
+            // Usar setTimeout para evitar actualizar el estado durante el renderizado
+            setTimeout(() => {
+              saveUserDataLocally(newForm).catch(error => {
+                console.error('Error en autoguardado:', error);
+              });
+            }, 0);
         }
         return newForm;
     });
@@ -320,7 +409,7 @@ const Profile: React.FC = (): JSX.Element => {
     }
 
     const reader = new FileReader();
-    reader.onloadend = () => {
+    reader.onloadend = async () => {
       const result = reader.result as string;
       setFotoPreview(result);
       const updatedForm: Usuario = {
@@ -335,40 +424,89 @@ const Profile: React.FC = (): JSX.Element => {
       setZoomLevel(1);
       setRotation(0);
       setPosition({x: 0, y: 0});
-      showThemedToast('Foto cargada, recuerda "Guardar Cambios" para actualizarla.', 'info');
-      // No autoguardamos aquí porque la carga de imagen podría requerir un `save` explícito al backend
+      
+      // Subir la foto al servidor
+      try {
+        showThemedToast('Subiendo foto...', 'info');
+        const fotoUrl = await uploadProfilePhoto(file);
+        
+        // Actualizar el formulario con la URL devuelta por el servidor
+        const finalForm = {
+          ...updatedForm,
+          foto: fotoUrl
+        };
+        
+        setForm(finalForm);
+        
+        // Guardar en localStorage
+        localStorage.setItem('usuario', JSON.stringify(finalForm));
+        
+        // Actualizar el contexto
+        if (setUsuario) {
+          setUsuario(finalForm);
+        }
+        
+        showThemedToast('Foto actualizada correctamente', 'success');
+      } catch (error) {
+        console.error('Error al subir foto:', error);
+        showThemedToast('Error al subir la foto. Inténtalo de nuevo.', 'error');
+      }
     };
     reader.readAsDataURL(file);
   }, [form]); // Dependencia form para tener los últimos datos
 
-  const handleRemoveFoto = useCallback(() => {
+  const handleRemoveFoto = useCallback(async () => {
     const confirmRemove = window.confirm('¿Estás seguro de que deseas eliminar tu foto de perfil?');
     if (!confirmRemove) return;
-    const updatedForm: Usuario = {
-      ...form,
-      foto: null,
-      fotoZoom: 1,
-      fotoRotation: 0,
-      fotoPositionX: 0,
-      fotoPositionY: 0,
-    };
-    setFotoPreview(null);
-    setForm(updatedForm);
-    setZoomLevel(1);
-    setRotation(0);
-    setPosition({x: 0, y: 0});
-    showThemedToast('Foto eliminada (guarda los cambios).', 'info');
-  }, [form]);
+    
+    try {
+      showThemedToast('Eliminando foto...', 'info');
+      
+      // Eliminar la foto del servidor
+      await deleteProfilePhoto();
+      
+      const updatedForm: Usuario = {
+        ...form,
+        foto: null,
+        fotoZoom: 1,
+        fotoRotation: 0,
+        fotoPositionX: 0,
+        fotoPositionY: 0,
+      };
+      
+      setFotoPreview(null);
+      setForm(updatedForm);
+      setZoomLevel(1);
+      setRotation(0);
+      setPosition({x: 0, y: 0});
+      
+      // Guardar en localStorage
+      localStorage.setItem('usuario', JSON.stringify(updatedForm));
+      
+      // Actualizar el contexto
+      if (setUsuario) {
+        setUsuario(updatedForm);
+      }
+      
+      showThemedToast('Foto eliminada correctamente', 'success');
+    } catch (error) {
+      console.error('Error al eliminar foto:', error);
+      showThemedToast('Error al eliminar la foto. Inténtalo de nuevo.', 'error');
+    }
+  }, [form, setUsuario]);
 
   // Manipulación de foto (Zoom, Rotar, Resetear)
   const updateFormWithPhotoProps = useCallback(async (newProps: Partial<Usuario>) => {
     setForm(prevForm => {
         const updatedForm = { ...prevForm, ...newProps };
         if (edit) {
-            saveUserDataLocally(updatedForm).catch(error => {
-              console.error('Error en autoguardado de propiedades de foto:', error);
-              // No mostramos un toast adicional para no sobrecargar al usuario
-            });
+            // Usar setTimeout para evitar actualizar el estado durante el renderizado
+            setTimeout(() => {
+              saveUserDataLocally(updatedForm).catch(error => {
+                console.error('Error en autoguardado de propiedades de foto:', error);
+                // No mostramos un toast adicional para no sobrecargar al usuario
+              });
+            }, 0);
         }
         return updatedForm;
     });
@@ -475,17 +613,17 @@ const Profile: React.FC = (): JSX.Element => {
       delete payload.fotoPositionY;
       
       // Llamar a la API para guardar los cambios
-      const updatedUser = await updateUserProfile(payload);
+      const updatedUser = await saveUserDataInRealTime(payload);
 
       setEdit(false);
       // Actualizar el contexto de autenticación después de que el renderizado haya finalizado
       setTimeout(() => {
         if (setUsuario) {
           // Asegurarse de que el rol se mantenga correctamente en el contexto
-          const rolActual = usuario?.rol;
+          const rolActual = usuario?.roles;
           const updatedUserData = {
             ...updatedUser,
-            rol: rolActual,
+            roles: rolActual,
             // Mantener las propiedades de manipulación de foto que no se guardan en el backend
             fotoZoom: zoomLevel,
             fotoRotation: rotation,
@@ -548,7 +686,15 @@ const Profile: React.FC = (): JSX.Element => {
         setPosition({ x: originalUserData.fotoPositionX || 0, y: originalUserData.fotoPositionY || 0 });
     } else {
         // Fallback completo si no hay respaldo, limpia el formulario
-        setForm({});
+        setForm({
+          nombre: undefined,
+          email: undefined,
+          departamento: undefined,
+          roles: undefined,
+          foto: undefined,
+          fechaRegistro: undefined,
+          genero: undefined
+        });
         setFotoPreview(null);
         setZoomLevel(1);
         setRotation(0);
@@ -560,8 +706,17 @@ const Profile: React.FC = (): JSX.Element => {
   // Helper para determinar el rol principal a mostrar
   const getRolPrincipal = useCallback((): string => {
     // Primero intentar obtener el rol del contexto de autenticación
-    if (usuario && usuario.rol) {
-      return usuario.rol;
+    if (usuario && usuario.roles) {
+      // Si roles es un string, devolverlo directamente
+      if (typeof usuario.roles === 'string') {
+        return usuario.roles;
+      }
+      // Si roles es un array, devolver el primer elemento
+      if (Array.isArray(usuario.roles) && usuario.roles.length > 0) {
+        return usuario.roles[0];
+      }
+      // Si ninguno de los casos anteriores, devolver un valor por defecto
+      return 'usuario';
     }
     
     // Si no está en el contexto, intentar obtenerlo del localStorage
@@ -569,8 +724,17 @@ const Profile: React.FC = (): JSX.Element => {
       const storedUser = localStorage.getItem('usuario');
       if (storedUser) {
         const parsedUser = JSON.parse(storedUser);
-        if (parsedUser && parsedUser.rol) {
-          return parsedUser.rol;
+        if (parsedUser && parsedUser.roles) {
+          // Si roles es un string, devolverlo directamente
+          if (typeof parsedUser.roles === 'string') {
+            return parsedUser.roles;
+          }
+          // Si roles es un array, devolver el primer elemento
+          if (Array.isArray(parsedUser.roles) && parsedUser.roles.length > 0) {
+            return parsedUser.roles[0];
+          }
+          // Si ninguno de los casos anteriores, devolver un valor por defecto
+          return 'usuario';
         }
       }
     } catch (error) {
@@ -792,7 +956,7 @@ const Profile: React.FC = (): JSX.Element => {
             {/* Indicador de Zoom y Posición (si editando y movida) */}
             {edit && fotoPreview && (zoomLevel !== 1 || rotation !== 0 || position.x !==0 || position.y !== 0) && (
               <div className="absolute top-2 left-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded-full z-10">
-                Zoom: {Math.round(zoomLevel * 100)}% {rotation !== 0 && `Rot: ${rotation}°`} { (position.x !== 0 || position.y !== 0) && `Pos: (${position.x}, ${position.y})`}
+                Zoom: {Math.round(zoomLevel * 100)}% {rotation !== 0 && `Rot: ${rotation}°`} {(position.x !== 0 || position.y !== 0) && `Pos: (${position.x}, ${position.y})`}
               </div>
             )}
           </div>

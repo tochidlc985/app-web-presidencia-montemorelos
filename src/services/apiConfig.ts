@@ -1,7 +1,11 @@
 // Configuración centralizada de la API - Simplificada y consistente
 
-// URL base para la API - siempre usa /api para rutas relativas
-export const API_BASE_URL = '/api';
+// URL base para la API - usar URL absoluta para evitar problemas con el proxy
+export const API_BASE_URL = typeof window !== 'undefined'
+  ? (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('localhost')
+      ? `${window.location.origin}/api`
+      : '/api')
+  : '/api';
 
 // URL absoluta para casos especiales
 export const ABSOLUTE_API_BASE_URL = typeof window !== 'undefined' 
@@ -9,7 +13,7 @@ export const ABSOLUTE_API_BASE_URL = typeof window !== 'undefined'
   : '/api';
 
 // URL ajustada para evitar problemas
-export const ADJUSTED_API_BASE_URL = '/api';
+export const ADJUSTED_API_BASE_URL = 'http://localhost:4000/api';
 
 // Endpoints de la API
 export const API_ENDPOINTS = {

@@ -9,6 +9,8 @@ import {
   FileInput, Sparkles, FolderKanban, ChevronDown // Añadido ChevronDown para el select
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import api from '../api';
+import { API_ENDPOINTS } from '../services/apiConfig';
 
 // Interfaz para el tipo de Reporte
 interface ReportFormData {
@@ -392,12 +394,35 @@ const processFiles = (files: File[]) => {
         aclaracionRespuestas: finalAclaracionRespuestas,
       };
 
-      console.log('Datos a enviar (simulado):', reportDataToSend);
-      console.log('Archivos adjuntos (simulado):', uploadedFiles.map(f => f.name));
+      // Crear FormData para enviar los archivos y los datos del reporte
+      const requestFormData = new FormData();
+      
+      // Agregar los datos del reporte como JSON string
+      requestFormData.append('data', JSON.stringify(reportDataToSend));
+      
+      // Agregar los archivos
+      uploadedFiles.forEach(file => {
+        requestFormData.append('imagenes', file);
+      });
 
-      await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 1000));
+      try {
+        // Enviar los datos al servidor
+        const response = await api.post(API_ENDPOINTS.REPORTES, requestFormData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
 
-      toast.success('🎉 ¡Reporte enviado! Nos pondremos en contacto contigo pronto.', { duration: 5000 });
+        if (response.status === 201) {
+          toast.success('🎉 ¡Reporte enviado! Nos pondremos en contacto contigo pronto.', { duration: 5000 });
+        } else {
+          throw new Error('Error al enviar el reporte');
+        }
+      } catch (error: any) {
+        console.error('Error al enviar el reporte:', error);
+        const errorMessage = error.response?.data?.message || error.message || 'Error al enviar el reporte';
+        throw new Error(errorMessage);
+      }
       
       setFormData({
         email: '',

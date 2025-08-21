@@ -293,16 +293,44 @@ class DatabaseService {
     delete updateData.email;
     delete updateData.fechaRegistro;
 
-    // Actualizar en la colección principal de usuarios
-    const result = await this.usersInternosCollection.updateOne({ email }, { $set: updateData });
+    // Verificar si el usuario existe
+    let usuario = await this.usersInternosCollection.findOne({ email });
+    let result;
+
+    if (!usuario) {
+      console.log(`Usuario con email ${email} no encontrado, creando nuevo usuario`);
+
+      // Si no hay nombre en los datos a actualizar, usar el email como nombre
+      const nombre = updateData.nombre || email.split('@')[0];
+      const rol = updateData.rol || 'usuario';
+
+      // Crear un nuevo usuario
+      const hashedPassword = await bcrypt.hash('temporal123', 10); // Contraseña temporal
+      const nuevoUsuario = {
+        nombre,
+        email,
+        password: hashedPassword,
+        rol,
+        fechaRegistro: new Date(),
+        ...updateData
+      };
+
+      const insertResult = await this.usersInternosCollection.insertOne(nuevoUsuario);
+      if (insertResult.acknowledged) {
+        usuario = { ...nuevoUsuario, _id: insertResult.insertedId };
+        result = { modifiedCount: 1 }; // Simular una modificación exitosa
+      } else {
+        console.error(`No se pudo crear el usuario con email ${email}`);
+        return false;
+      }
+    } else {
+      // Actualizar en la colección principal de usuarios
+      result = await this.usersInternosCollection.updateOne({ email }, { $set: updateData });
+    }
 
     // También actualizar en la colección de perfiles correspondiente
     try {
       const dbPerfil = await this.connectToDatabase(this.DB_NAME_PERFIL);
-
-      // Obtener el rol del usuario para saber en qué colección de perfiles actualizar
-      const usuario = await this.usersInternosCollection.findOne({ email });
-      if (!usuario) return false;
 
       let coleccionPerfil;
       if (usuario.rol === 'administrador') {
@@ -315,10 +343,23 @@ class DatabaseService {
         coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_USUARIO_PERFIL);
       }
 
-      await coleccionPerfil.updateOne(
-        { email },
-        { $set: updateData }
-      );
+      // Verificar si ya existe un perfil para este usuario
+      const perfilExistente = await coleccionPerfil.findOne({ email });
+
+      if (!perfilExistente) {
+        // Si no existe, crear un nuevo perfil en la colección correspondiente
+        await coleccionPerfil.insertOne({
+          ...usuario,
+          ...updateData,
+          fechaActualizacion: new Date()
+        });
+      } else {
+        // Si ya existe, actualizarlo
+        await coleccionPerfil.updateOne(
+          { email },
+          { $set: { ...updateData, fechaActualizacion: new Date() } }
+        );
+      }
     } catch (error) {
       console.error('Error al actualizar en colección de perfiles:', error);
       // No lanzamos el error para no interrumpir el flujo principal

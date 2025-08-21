@@ -155,6 +155,85 @@ app.get('/api/estadisticas', async (req, res) => {
   }
 });
 
+// Profile routes
+app.get('/api/perfil/:email', async (req, res) => {
+  try {
+    const perfil = await db.buscarPerfilPorEmail(req.params.email);
+    if (!perfil) return res.status(404).json({ message: 'Perfil no encontrado' });
+    res.json(perfil);
+  } catch (error) {
+    res.status(500).json({ message: 'Error al obtener perfil', error: error.message });
+  }
+});
+
+app.put('/api/perfil/:email', async (req, res) => {
+  try {
+    console.log(`Intentando actualizar perfil para email: ${req.params.email}`);
+    console.log('Datos a actualizar:', JSON.stringify(req.body, null, 2));
+
+    const ok = await db.actualizarPerfilUsuario(req.params.email, req.body);
+    if (ok) {
+      console.log(`Perfil actualizado correctamente para email: ${req.params.email}`);
+
+      // Obtener el perfil actualizado para devolverlo
+      try {
+        const perfilActualizado = await db.buscarPerfilPorEmail(req.params.email);
+        res.json({
+          message: 'Perfil actualizado correctamente',
+          usuario: perfilActualizado
+        });
+      } catch (error) {
+        // Si hay error al obtener el perfil actualizado, devolver los datos originales
+        console.warn(`No se pudo obtener el perfil actualizado para ${req.params.email}, devolviendo datos originales`);
+        res.json({
+          message: 'Perfil actualizado correctamente',
+          usuario: req.body
+        });
+      }
+    } else {
+      console.log(`No se encontró perfil para email: ${req.params.email}`);
+      res.status(404).json({ message: 'Perfil no encontrado' });
+    }
+  } catch (error) {
+    console.error(`Error al actualizar perfil para email: ${req.params.email}:`, error);
+    res.status(500).json({ message: 'Error al actualizar perfil', error: error.message });
+  }
+});
+
+// Update and delete reporte routes
+app.patch('/api/reportes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const update = req.body;
+    const ok = await db.actualizarReporte(id, update);
+    if (ok) {
+      res.json({ message: 'Reporte actualizado correctamente' });
+    } else {
+      res.status(404).json({ message: 'Reporte no encontrado' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Error al actualizar reporte', error: error.message });
+  }
+});
+
+app.delete('/api/reportes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Obtener reporte antes de eliminar
+    const reporte = await db.obtenerReportePorId(id);
+    const ok = await db.eliminarReporte(id);
+
+    if (ok) {
+      res.json({ message: 'Reporte eliminado correctamente' });
+    } else {
+      res.status(404).json({ message: 'Reporte no encontrado' });
+    }
+  } catch (error) {
+    console.error('Error en DELETE /api/reportes/:id:', error);
+    res.status(500).json({ message: 'Error en el servidor', error: error.message });
+  }
+});
+
 // Serve React app for all other routes
 app.get('*', (req, res) => {
   const indexPath = path.join(__dirname, 'dist', 'index.html');
