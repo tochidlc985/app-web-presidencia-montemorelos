@@ -2,9 +2,11 @@
 
 // URL base para la API - usar URL absoluta para evitar problemas con el proxy
 export const API_BASE_URL = typeof window !== 'undefined'
-  ? (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('localhost')
+  ? (window.location.hostname.includes('vercel.app')
       ? `${window.location.origin}/api`
-      : '/api')
+      : (window.location.hostname.includes('localhost')
+          ? `${window.location.origin}/api`
+          : '/api'))
   : '/api';
 
 // URL absoluta para casos especiales
