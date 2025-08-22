@@ -1,9 +1,9 @@
 import axios from 'axios';
-import { ADJUSTED_API_BASE_URL, API_BASE_URL } from './services/apiConfig';
+import { API_BASE_URL } from './services/apiConfig';
 
-// Usar URL ajustada para todas las solicitudes
+// Usar URL base para todas las solicitudes
 const api = axios.create({
-  baseURL: ADJUSTED_API_BASE_URL || API_BASE_URL,
+  baseURL: API_BASE_URL,
   timeout: 30000, // Añadir timeout para evitar peticiones colgadas (aumentado a 30 segundos)
   withCredentials: true, // Importante para CORS y cookies
   headers: {

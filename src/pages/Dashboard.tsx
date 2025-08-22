@@ -479,7 +479,8 @@ const Dashboard: React.FC = () => {
       // Después de 3 segundos, volver el estado a idle
       setTimeout(() => setAutoSaveStatus('idle'), 3000);
     } catch (err: any) {
-      console.error('Error al auto-guardar reporte:', err.response?.data || err.message);
+      console.error('Error al auto-guardar reporte:', err);
+      console.error('Respuesta del servidor:', err.response);
       setAutoSaveStatus('error');
     }
   }, [reportes, editData]);
@@ -540,8 +541,9 @@ const Dashboard: React.FC = () => {
       setReportes(prev => prev.map(r => r._id === reportId ? { ...r, ...updatedFields } : r));
 
     } catch (err: any) {
-      console.error('Error al actualizar reporte:', err.response?.data || err.message);
-      showThemedToast(`Error al guardar: ${err.response?.data?.message || 'Hubo un problema.'}`, 'error');
+      console.error('Error al actualizar reporte:', err);
+      console.error('Respuesta del servidor:', err.response);
+      showThemedToast(`Error al guardar: ${err.response?.data?.message || err.message || 'Hubo un problema.'}`, 'error');
     } finally {
       setEditRowId(null);
       setEditData({});
