@@ -200,8 +200,27 @@ app.put('/api/perfil/:email', async (req, res) => {
   }
 });
 
+// Middleware para verificar JWT y rol
+function requireRole(role) {
+  return (req, res, next) => {
+    const auth = req.headers.authorization;
+    if (!auth) return res.status(401).json({ message: 'No autorizado' });
+    const token = auth.split(' ')[1];
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      // Verificar si tiene el rol requerido (compatible con array o string)
+      const userRoles = Array.isArray(decoded.roles) ? decoded.roles : [decoded.roles || decoded.rol];
+      if (!userRoles.includes(role)) return res.status(403).json({ message: 'Permiso denegado' });
+      req.user = decoded;
+      next();
+    } catch (err) {
+      return res.status(401).json({ message: 'Token inválido' });
+    }
+  };
+}
+
 // Update and delete reporte routes
-app.patch('/api/reportes/:id', async (req, res) => {
+app.patch('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
   try {
     const { id } = req.params;
     const update = req.body;
@@ -216,7 +235,7 @@ app.patch('/api/reportes/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/reportes/:id', async (req, res) => {
+app.delete('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
   try {
     const { id } = req.params;
     // Obtener reporte antes de eliminar
