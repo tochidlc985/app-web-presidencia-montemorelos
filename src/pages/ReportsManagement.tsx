@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  FileText, Search, Filter, Edit, Trash2, Eye, Plus,
-  AlertCircle, CheckCircle, Clock, X, RefreshCw,
-  ChevronDown, ChevronUp, MoreVertical
+  FileText, Search, Filter, Trash2, Eye, X, RefreshCw,
+  ChevronDown, ChevronUp
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api';
 import { API_ENDPOINTS } from '../services/apiConfig';
-import { useAuth } from '../context/AuthContext';
 
 // Interfaces
 interface Report {
@@ -34,7 +32,6 @@ interface FilterOptions {
 }
 
 const ReportsManagement: React.FC = () => {
-  const { usuario } = useAuth();
   const [reports, setReports] = useState<Report[]>([]);
   const [filteredReports, setFilteredReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,8 +45,6 @@ const ReportsManagement: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [editingReport, setEditingReport] = useState<Report | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
   const [updating, setUpdating] = useState(false);
 
   // Fetch reports
