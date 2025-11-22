@@ -6,6 +6,7 @@ import './styles/themes.css';
 
 import AppLayout from './components/AppLayout';
 import ReportForm from './pages/ReportForm';
+import ReportsManagement from './pages/ReportsManagement';
 import Dashboard from './pages/Dashboard';
 import QRGenerator from './pages/QRGenerator';
 import Login from './pages/Login';
@@ -102,6 +103,7 @@ const AppContent: React.FC = () => {
             <Route path="/" element={<Navigate to="/home" replace />} />
             <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
             <Route path="/reporte" element={<ProtectedRoute><ReportForm /></ProtectedRoute>} />
+            <Route path="/reportes" element={<ProtectedRoute><ReportsManagement /></ProtectedRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/qr" element={<ProtectedRoute><QRGenerator /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />

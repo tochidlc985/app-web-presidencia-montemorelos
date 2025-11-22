@@ -41,6 +41,7 @@ const Navigation = () => {
   const navItems = useMemo(() => ([
     { path: '/home', label: 'Inicio', icon: Home, color: 'from-blue-600 to-blue-700' },
     { path: '/reporte', label: 'Nuevo Reporte', icon: FileText, color: 'from-emerald-500 to-emerald-600' },
+    { path: '/reportes', label: 'Detalle de Reportes', icon: FileText, color: 'from-teal-500 to-teal-600' },
     { path: '/dashboard', label: 'Dashboard', icon: BarChart3, color: 'from-purple-600 to-purple-700' },
     { path: '/qr', label: 'Código QR', icon: QrCode, color: 'from-orange-500 to-orange-600' },
     { path: '/settings', label: 'Configuración', icon: Settings, color: 'from-gray-600 to-gray-700' },
