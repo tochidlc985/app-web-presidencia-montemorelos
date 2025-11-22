@@ -13,18 +13,18 @@ import {
   Loader2,
   Info,
   X,
-  Eye
+  Eye,
+  // ChevronDown, // <-- ELIMINADO/COMENTADO: Ya no se usa directamente. La flecha es un SVG en backgroundImage.
 } from 'lucide-react';
 import { API_ENDPOINTS } from '../services/apiConfig';
 import api from '../api';
-import { AxiosRequestConfig } from 'axios';
-import { useRealtime } from '../services/realtimeService';
-
+// import type { AxiosRequestConfig } from 'axios';
+// import { useRealtime } from '../services/realtimeService'; // <-- COMENTADO: No se usa actualmente.
 
 // Interfaz para el tipo de Reporte original desde la API
 interface Reporte {
   _id: string;
-  departamento: string[];
+  departamento: string[] | string; // Puede ser un array o un string
   descripcion: string;
   prioridad: string;
   status: string;
@@ -36,15 +36,15 @@ interface Reporte {
 // Interfaz para la actividad reciente (para mapear Reporte a un formato más manejable en la UI)
 interface ActividadReciente {
   id: string;
-  dept: string;
+  dept: string; // Departamento o departamentos unidos por coma
   priority: string;
-  issue: string; // Descripcion breve
+  issue: string; // Descripcion breve (o titulo si existe)
   time: string;
   status: string;
   quienReporta?: string;
   tipoProblema?: string;
   colorClass: string;
-  descripcion?: string; // Descripción completa para el modal de detalle
+  descripcion: string; // Descripción completa para el modal de detalle
 }
 
 // Definiciones de tooltips para KPIs
@@ -122,8 +122,6 @@ const Home: React.FC = () => {
     },
   ], []);
 
-  // Function to process raw report data into UI-friendly format
-
   // Function to handle API errors
   const handleApiError = useCallback((err: any) => {
     let errorMessage: string;
@@ -135,7 +133,7 @@ const Home: React.FC = () => {
       if (err.response.status === 500) {
         errorMessage = 'Error interno del servidor. Por favor, intenta más tarde.';
       } else if (err.response.status === 401) {
-        errorMessage = 'No autorizado. Por favor, inicia sesión de nuevo.';
+        errorMessage = 'Sesión expirada. Por favor, inicia sesión de nuevo.';
         localStorage.removeItem('token');
         localStorage.removeItem('usuario');
         navigate('/login');
@@ -160,32 +158,26 @@ const Home: React.FC = () => {
       { label: 'Departamentos Activos', value: 'N/A', icon: Users, color: 'from-emerald-500 to-green-600', bgColor: 'bg-green-50' },
     ]);
     setRecentActivity([]);
-  }, [navigate]); // navigate is a stable dependency
+    setTotalReportes(0);
+    setResueltos(0);
+  }, [navigate]);
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        const token = localStorage.getItem('token');
-        if (!token) {
+        // El interceptor de `api.ts` maneja el token automáticamente.
+        if (!localStorage.getItem('token')) {
           throw new Error("No hay token de autenticación. Por favor, inicia sesión.");
         }
 
-        const config = { headers: { Authorization: `Bearer ${token}` } };
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 seconds timeout
-
         try {
+          // `api` ya tiene el token gracias al interceptor.
           const res = await api.get(API_ENDPOINTS.REPORTES, {
-            ...config,
-            signal: controller.signal,
-          } as AxiosRequestConfig);
-          console.log('Datos de reportes recibidos:', res.data);
+            timeout: 10000 // 10 seconds timeout
+          });
           
-
-          clearTimeout(timeoutId);
-
           if (!res.data) {
             throw new Error('No se recibieron datos del servidor');
           }
@@ -194,14 +186,17 @@ const Home: React.FC = () => {
           const reportes: Reporte[] = Array.isArray(responseData) ? responseData : (responseData?.reportes || responseData?.data || []);
 
           if (!Array.isArray(reportes)) {
-            throw new Error('Formato de datos de reportes incorrecto.');
+            console.error('API response structure:', responseData); // Log for debugging
+            throw new Error('Formato de datos de reportes incorrecto o estructura inesperada.');
           }
 
-          // Procesar los datos directamente en lugar de usar la función memoizada
           const now = new Date();
+          const currentMonth = now.getMonth();
+          const currentYear = now.getFullYear();
+
           const reportesMes = reportes.filter(r => {
-            const fecha = r.timestamp ? new Date(r.timestamp) : new Date(0);
-            return fecha.getMonth() === now.getMonth() && fecha.getFullYear() === now.getFullYear();
+            const fecha = new Date(r.timestamp);
+            return fecha.getMonth() === currentMonth && fecha.getFullYear() === currentYear;
           });
           const pendientes = reportes.filter(r => r.status === 'Pendiente').length;
           const criticos = reportes.filter(r => r.prioridad === 'Crítica').length;
@@ -213,7 +208,7 @@ const Home: React.FC = () => {
           reportesMes.forEach(r => {
             if (Array.isArray(r.departamento)) {
               r.departamento.forEach((d: string) => departamentosSet.add(d));
-            } else if (r.departamento) {
+            } else if (typeof r.departamento === 'string') {
               departamentosSet.add(r.departamento);
             }
           });
@@ -226,14 +221,14 @@ const Home: React.FC = () => {
           ]);
 
           const sortedReports = [...reportes].sort((a, b) => {
-            const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-            const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            const dateA = new Date(a.timestamp).getTime();
+            const dateB = new Date(b.timestamp).getTime();
             return dateB - dateA;
           });
 
           setRecentActivity(
             sortedReports
-              .slice(0, 15)
+              .slice(0, 15) // Mostrar solo los 15 más recientes
               .map((r) => ({
                 id: r._id,
                 dept: Array.isArray(r.departamento) ? r.departamento.join(', ') : (r.departamento || 'N/A'),
@@ -248,23 +243,29 @@ const Home: React.FC = () => {
               }))
           );
         } catch (err) {
-          clearTimeout(timeoutId);
           handleApiError(err);
         } finally {
           setIsLoading(false);
         }
       } catch (err: any) {
-        // This catch block handles errors from the first try (authentication)
-        console.error('Error de autenticación:', err);
-        setError(err.message || 'Error de autenticación');
+        setError(err.message || 'Error de autenticación. Por favor, inicia sesión de nuevo.');
         setIsLoading(false);
       }
     };
     fetchData();
-  }, []); // Eliminamos las dependencias para evitar el bucle infinito
+  }, [handleApiError]);
 
-  const allStatuses = useMemo(() => ['todos', ...Array.from(new Set(recentActivity.map(r => r.status)))], [recentActivity]);
-  const allPriorities = useMemo(() => ['todos', ...Array.from(new Set(recentActivity.map(r => r.priority)))], [recentActivity]);
+  // Use a ref for allStatuses and allPriorities to ensure stable identity
+  const allStatuses = useMemo(() => {
+    const statuses = Array.from(new Set(recentActivity.map(r => r.status)));
+    return ['todos', ...statuses];
+  }, [recentActivity]);
+
+  const allPriorities = useMemo(() => {
+    const priorities = Array.from(new Set(recentActivity.map(r => r.priority)));
+    return ['todos', ...priorities];
+  }, [recentActivity]);
+
 
   const actividadFiltrada = useMemo(() => {
     return recentActivity.filter(r =>
@@ -273,10 +274,16 @@ const Home: React.FC = () => {
     );
   }, [recentActivity, filtroEstado, filtroPrioridad]);
 
+
+  // Código para generar el SVG de la flecha personalizada para los select
+  const generateSvgArrow = useCallback((color: string) => `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='${color}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-chevron-down'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E`, []);
+  const defaultArrowColor = useMemo(() => encodeURIComponent('#6B7280'), []); // Tailwind's gray-500, hex code URL-encoded
+  const focusArrowColor = useMemo(() => encodeURIComponent('#3B82F6'), []); // Tailwind's blue-500 for focus effect
+
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-blue-50 via-indigo-100 to-blue-200 font-inter antialiased pt-24 pb-16 overflow-hidden">
       {/* Patrón de ondas SVG estático en el fondo */}
-      <div className="absolute inset-x-0 bottom-0 h-96 z-0 overflow-hidden opacity-50">
+      <div className="absolute inset-x-0 bottom-0 h-96 z-0 overflow-hidden opacity-50 pointer-events-none select-none">
         <svg className="w-full h-full" viewBox="0 0 1440 320" preserveAspectRatio="none">
           <path
             d="M0,192L80,186.7C160,181,320,171,480,186.7C640,203,800,245,960,240C1120,235,1280,181,1360,154.7L1440,128L1440,320L1360,320C1280,320,1120,320,960,320C800,320,640,320,480,320C320,320,160,320,80,320L0,320Z"
@@ -291,28 +298,75 @@ const Home: React.FC = () => {
         </svg>
       </div>
 
+      {/* Burbujas flotantes de fondo (opcional, si no usas BackgroundMedia con video/imagen) */}
+      <div className="absolute inset-0 z-0 opacity-40 pointer-events-none select-none">
+        <motion.div
+          className="absolute w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob top-1/4 left-1/4"
+          animate={{ x: [0, 80, 0], y: [0, -50, 0] }}
+          transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute w-80 h-80 bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000 bottom-1/4 right-1/4"
+          animate={{ x: [0, -60, 0], y: [0, 70, 0] }}
+          transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute w-64 h-64 bg-emerald-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000 top-1/2 right-1/4"
+          animate={{ x: [0, 90, 0], y: [0, -80, 0] }}
+          transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
+        />
+      </div>
+
       <div className="relative max-w-7xl mx-auto space-y-16 px-4 sm:px-6 lg:px-8 z-10">
         {/* Encabezado Principal y Logo */}
         <motion.div
           initial={{ opacity: 0, y: -50 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="text-center bg-white rounded-5xl p-8 sm:p-12 shadow-3xl border border-gray-100 backdrop-blur-md relative overflow-hidden"
+          className="text-center bg-gradient-to-br from-white to-blue-50 rounded-5xl p-8 sm:p-12 shadow-3xl border border-white/70 backdrop-blur-md relative overflow-hidden"
         >
+          {/* Efecto de brillo animado en el fondo */}
+          <motion.div 
+            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+            initial={{ x: '-100%' }}
+            animate={{ x: '100%' }}
+            transition={{ duration: 3, repeat: Infinity, ease: "linear", repeatDelay: 2 }}
+          />
+          
           <motion.div className="flex justify-center mb-8 z-10 relative">
-            <img
-              src="/Montemorelos.jpg"
-              alt="Logo Montemorelos"
-              className="h-36 w-36 sm:h-44 sm:w-44 object-contain rounded-full shadow-2xl p-1 bg-gradient-to-tr from-yellow-400 via-orange-500 to-red-500 ring-4 ring-yellow-300 ring-opacity-70 border-4 border-white"
-            />
+            <div className="relative">
+              <motion.div 
+                className="absolute inset-0 rounded-full bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 opacity-30 blur-xl"
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 3, repeat: Infinity }}
+              />
+              <img
+                src="/Montemorelos.jpg"
+                alt="Logo Montemorelos"
+                className="h-40 w-40 sm:h-48 sm:w-48 object-contain rounded-full shadow-2xl p-2 bg-white transform transition-all duration-300 hover:scale-105 relative z-10"
+              />
+            </div>
           </motion.div>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-700 via-indigo-600 to-purple-600 mb-4 leading-tight tracking-tight drop-shadow-lg">
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-800 via-indigo-700 to-purple-800 mb-6 leading-tight tracking-tight drop-shadow-lg">
             Plataforma de Gestión de Servicios
           </h1>
-          <p className="text-xl sm:text-2xl text-gray-700 max-w-4xl mx-auto font-medium leading-relaxed sm:leading-loose drop-shadow-sm">
-            Optimiza y coordina los procesos del <span className="text-blue-800 font-semibold">Departamento de Sistemas</span> de la Presidencia Municipal de Montemorelos.
+          <p className="text-xl sm:text-2xl text-gray-700 max-w-4xl mx-auto font-medium leading-relaxed sm:leading-loose drop-shadow-sm mb-8">
+            Optimiza y coordina los procesos del <span className="text-blue-800 font-bold text-2xl">Departamento de Sistemas</span> de la Presidencia Municipal de Montemorelos.
           </p>
-          <div className="h-3 mx-auto mt-8 rounded-full bg-gradient-to-r from-blue-400 via-green-300 to-yellow-400 shadow-2xl w-150px"></div>
+          <div className="flex justify-center gap-4 mt-6">
+            <motion.div 
+              className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 shadow-lg"
+              initial={{ width: 0 }}
+              animate={{ width: "80px" }}
+              transition={{ duration: 1, ease: "easeOut" }}
+            />
+            <motion.div 
+              className="h-2 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 shadow-lg"
+              initial={{ width: 0 }}
+              animate={{ width: "60px" }}
+              transition={{ duration: 1, delay: 0.3, ease: "easeOut" }}
+            />
+          </div>
         </motion.div>
 
         {/* Sección de Indicadores Clave (KPIs) */}
@@ -331,7 +385,16 @@ const Home: React.FC = () => {
                 whileHover={{ scale: 1.03, y: -5, boxShadow: "0px 18px 36px rgba(0,0,0,0.18)" }}
                 className={`relative rounded-3xl p-8 shadow-xl border border-white/70 ${stat.bgColor} flex flex-col justify-between transition-all duration-300 overflow-hidden cursor-pointer transform will-change-transform group`}
               >
+                {/* Elemento que crea el "brillo" al hover */}
                 <div className="absolute inset-0 bg-gradient-to-br from-white via-transparent to-white opacity-0 transform -rotate-12 translate-x-1/2 group-hover:opacity-10 transition-all duration-700 ease-out z-0"></div>
+                
+                {/* Efecto de onda animada */}
+                <motion.div 
+                  className="absolute -bottom-4 -right-4 w-24 h-24 rounded-full bg-white opacity-10"
+                  animate={{ scale: [1, 1.5, 1] }}
+                  transition={{ duration: 3, repeat: Infinity }}
+                />
+                
                 <div className="flex items-start justify-between z-10">
                   <div>
                     <p className="text-gray-700 text-lg font-semibold flex items-center gap-2 mb-3 group-hover:text-gray-900 transition-colors">
@@ -355,6 +418,16 @@ const Home: React.FC = () => {
                     <Icon className="h-10 w-10 text-white" />
                   </motion.div>
                 </div>
+                
+                {/* Barra de progreso visual */}
+                <div className="mt-6 w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                  <motion.div 
+                    className={`h-full rounded-full bg-gradient-to-r ${stat.color}`}
+                    initial={{ width: 0 }}
+                    animate={{ width: stat.value !== 'N/A' && typeof stat.value === 'number' ? `${Math.min(100, stat.value * 10)}%` : '30%' }}
+                    transition={{ duration: 1, delay: 0.5 }}
+                  />
+                </div>
               </motion.div>
             );
           })}
@@ -374,16 +447,44 @@ const Home: React.FC = () => {
                   whileTap={{ scale: 0.98 }}
                   className={`relative rounded-3xl p-8 sm:p-10 shadow-xl border border-white/60 bg-white/80 backdrop-blur-lg transition-all duration-400 overflow-hidden cursor-pointer hover:border-blue-300`}
                 >
-                  <div className={`bg-gradient-to-r ${action.color} ${action.hoverColor} w-32 h-32 rounded-full flex items-center justify-center mx-auto mb-8 shadow-2xl transition-all duration-500 ease-in-out group-hover:scale-110 group-hover:rotate-6`}>
+                  {/* Efecto de brillo animado */}
+                  <motion.div 
+                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                    initial={{ x: '-100%' }}
+                    animate={{ x: '100%' }}
+                    transition={{ duration: 3, repeat: Infinity, ease: "linear", repeatDelay: 2 }}
+                  />
+                  
+                  {/* Efecto de onda en el fondo */}
+                  <motion.div 
+                    className="absolute -bottom-10 -right-10 w-40 h-40 rounded-full opacity-20"
+                    style={{ background: action.color.replace('to-', '') }}
+                    animate={{ scale: [1, 1.5, 1] }}
+                    transition={{ duration: 4, repeat: Infinity }}
+                  />
+                  
+                  <div className={`bg-gradient-to-r ${action.color} ${action.hoverColor} w-32 h-32 rounded-full flex items-center justify-center mx-auto mb-8 shadow-2xl transition-all duration-500 ease-in-out group-hover:scale-[1.15] group-hover:rotate-6 relative z-10`}>
                     <Icon className="h-16 w-16 text-white transition-transform duration-500 group-hover:rotate-12" />
                   </div>
-                  <h3 className="text-3xl sm:text-4xl font-extrabold mb-3 leading-snug tracking-tight drop-shadow-sm transition-colors duration-300" style={{ color: action.textColor }}>
+                  <h3 className="text-3xl sm:text-4xl font-extrabold mb-3 leading-snug tracking-tight drop-shadow-sm transition-colors duration-300 relative z-10" style={{ color: action.textColor }}>
                     {action.title}
                   </h3>
-                  <p className="text-gray-700 leading-relaxed text-lg sm:text-xl group-hover:text-gray-900 transition-colors">
+                  <p className="text-gray-700 leading-relaxed text-lg sm:text-xl group-hover:text-gray-900 transition-colors relative z-10">
                     {action.description}
                   </p>
-                  <div className="absolute -bottom-8 -right-8 w-40 h-40 rounded-full bg-blue-500 opacity-5 blur-xl"></div>
+                  
+                  {/* Indicador de enlace */}
+                  <div className="flex justify-center mt-6 relative z-10">
+                    <motion.div 
+                      className="text-sm font-medium flex items-center gap-1 px-4 py-2 rounded-full bg-gray-100 text-gray-600 group-hover:bg-blue-100 group-hover:text-blue-700 transition-colors duration-300"
+                      whileHover={{ x: 5 }}
+                    >
+                      Acceder
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </motion.div>
+                  </div>
                 </motion.div>
               </Link>
             );
@@ -399,7 +500,7 @@ const Home: React.FC = () => {
             whileHover={{ scale: 1.03, boxShadow: "0px 12px 24px rgba(0,0,0,0.1)" }}
             className="rounded-3xl p-8 sm:p-10 h-56 sm:h-auto border border-white/70 shadow-md bg-white/80 backdrop-blur-lg flex flex-col items-center justify-center cursor-pointer transition-transform duration-300 hover:shadow-xl group"
           >
-            <CheckCircle className="h-16 w-16 text-emerald-600 mb-5 drop-shadow-md group-hover:scale-110 transition-transform" />
+            <CheckCircle className="h-16 w-16 text-emerald-600 mb-5 drop-shadow-md group-hover:scale-[1.10] transition-transform" />
             <span className="text-6xl sm:text-7xl font-extrabold text-emerald-700 drop-shadow-sm leading-tight">{resueltos}</span>
             <span className="text-2xl text-gray-700 font-semibold mt-2">Reportes Resueltos</span>
           </motion.div>
@@ -410,7 +511,7 @@ const Home: React.FC = () => {
             whileHover={{ scale: 1.03, boxShadow: "0px 12px 24px rgba(0,0,0,0.1)" }}
             className="rounded-3xl p-8 sm:p-10 h-56 sm:h-auto border border-white/70 shadow-md bg-white/80 backdrop-blur-lg flex flex-col items-center justify-center cursor-pointer transition-transform duration-300 hover:shadow-xl group"
           >
-            <TrendingUp className="h-16 w-16 text-blue-600 mb-5 drop-shadow-md group-hover:scale-110 transition-transform" />
+            <TrendingUp className="h-16 w-16 text-blue-600 mb-5 drop-shadow-md group-hover:scale-[1.10] transition-transform" />
             <span className="text-6xl sm:text-7xl font-extrabold text-blue-700 drop-shadow-sm leading-tight">{totalReportes}</span>
             <span className="text-2xl text-gray-700 font-semibold mt-2">Total de Reportes Registrados</span>
           </motion.div>
@@ -425,14 +526,20 @@ const Home: React.FC = () => {
         >
           <label htmlFor="filterStatus" className="text-2xl font-bold text-blue-900 mr-4 flex-shrink-0">Filtros:</label>
           <div className="flex flex-wrap items-center gap-6">
-            <div className="relative flex items-center gap-3">
-              <span className="text-gray-700 text-lg font-semibold">Estado:</span>
+            <div className="relative flex items-center gap-3 group"> {/* Añadido 'group' para efectos de hover */}
+              <span className="text-gray-700 text-lg font-semibold group-focus-within:text-blue-700 transition-colors">Estado:</span>
               <select
                 id="filterStatus"
                 value={filtroEstado}
                 onChange={e => setFiltroEstado(e.target.value)}
-                className="rounded-xl border border-gray-300 bg-gray-50 p-3.5 shadow-sm focus:outline-none focus:ring-3 focus:ring-blue-400 focus:border-blue-400 transition cursor-pointer text-lg text-blue-900 font-medium appearance-none pr-10 hover:shadow-md"
-                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-chevron-down'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1.2rem' }}
+                className="rounded-xl border border-gray-300 bg-gray-50 p-3.5 shadow-sm focus:outline-none focus:ring-3 focus:ring-blue-400 focus:border-blue-400 transition cursor-pointer text-lg text-blue-900 font-medium appearance-none pr-10 hover:shadow-md
+                bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.2rem] // Default styles for custom arrow
+                group-hover:bg-[length:1.25rem_1.25rem] group-hover:bg-[right_0.7rem_center] group-focus-within:bg-[length:1.25rem_1.25rem] group-focus-within:bg-[right_0.7rem_center]" // Hover/Focus styles
+                style={{
+                  backgroundImage: `url("${generateSvgArrow(defaultArrowColor)}")`,
+                }}
+                onFocus={(e) => (e.target.style.backgroundImage = `url("${generateSvgArrow(focusArrowColor)}")`)}
+                onBlur={(e) => (e.target.style.backgroundImage = `url("${generateSvgArrow(defaultArrowColor)}")`)}
               >
                 {allStatuses.map(e => (
                   <option key={e} value={e}>
@@ -441,14 +548,20 @@ const Home: React.FC = () => {
                 ))}
               </select>
             </div>
-            <div className="relative flex items-center gap-3">
-              <span className="text-gray-700 text-lg font-semibold">Prioridad:</span>
+            <div className="relative flex items-center gap-3 group">
+              <span className="text-gray-700 text-lg font-semibold group-focus-within:text-blue-700 transition-colors">Prioridad:</span>
               <select
                 id="filterPriority"
                 value={filtroPrioridad}
                 onChange={e => setFiltroPrioridad(e.target.value)}
-                className="rounded-xl border border-gray-300 bg-gray-50 p-3.5 shadow-sm focus:outline-none focus:ring-3 focus:ring-blue-400 focus:border-blue-400 transition cursor-pointer text-lg text-blue-900 font-medium appearance-none pr-10 hover:shadow-md"
-                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-chevron-down'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1.2rem' }}
+                className="rounded-xl border border-gray-300 bg-gray-50 p-3.5 shadow-sm focus:outline-none focus:ring-3 focus:ring-blue-400 focus:border-blue-400 transition cursor-pointer text-lg text-blue-900 font-medium appearance-none pr-10 hover:shadow-md
+                bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.2rem]
+                group-hover:bg-[length:1.25rem_1.25rem] group-hover:bg-[right_0.7rem_center] group-focus-within:bg-[length:1.25rem_1.25rem] group-focus-within:bg-[right_0.7rem_center]"
+                style={{
+                  backgroundImage: `url("${generateSvgArrow(defaultArrowColor)}")`,
+                }}
+                onFocus={(e) => (e.target.style.backgroundImage = `url("${generateSvgArrow(focusArrowColor)}")`)}
+                onBlur={(e) => (e.target.style.backgroundImage = `url("${generateSvgArrow(defaultArrowColor)}")`)}
               >
                 {allPriorities.map(p => (
                   <option key={p} value={p}>
@@ -468,8 +581,16 @@ const Home: React.FC = () => {
           className="mt-16"
         >
           <div className="bg-white/90 backdrop-blur-sm rounded-4xl shadow-3xl border border-white/70 overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-7 sm:p-9 flex items-center justify-center border-b-2 border-indigo-700">
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-white flex items-center gap-4 drop-shadow-lg">
+            <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-7 sm:p-9 flex items-center justify-center border-b-2 border-indigo-700 relative overflow-hidden">
+              {/* Efecto de brillo animado */}
+              <motion.div 
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                initial={{ x: '-100%' }}
+                animate={{ x: '100%' }}
+                transition={{ duration: 3, repeat: Infinity, ease: "linear", repeatDelay: 2 }}
+              />
+              
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-white flex items-center gap-4 drop-shadow-lg relative z-10">
                 <TrendingUp className="h-10 w-10 text-yellow-300" /> Actividad Reciente
               </h2>
             </div>
@@ -517,14 +638,27 @@ const Home: React.FC = () => {
                 )}
                 {!isLoading && !error && actividadFiltrada.length > 0 && actividadFiltrada.map((item, index) => {
                   // Extracted priority text color logic
-                  const priorityTextColor = () => {
+                  const getPriorityColorClasses = () => {
                     switch (item.priority) {
                       case 'Crítica': return 'bg-red-600 text-white';
                       case 'Alta': return 'bg-orange-500 text-white';
                       case 'Media': return 'bg-yellow-500 text-gray-900';
-                      default: return 'bg-green-500 text-white';
+                      case 'Baja': return 'bg-green-500 text-white';
+                      default: return 'bg-gray-500 text-white';
                     }
                   };
+                  
+                  // Obtener color para la barra lateral según la prioridad
+                  const getPriorityBarColor = () => {
+                    switch (item.priority) {
+                      case 'Crítica': return 'bg-gradient-to-b from-red-500 to-red-700';
+                      case 'Alta': return 'bg-gradient-to-b from-orange-500 to-orange-700';
+                      case 'Media': return 'bg-gradient-to-b from-yellow-500 to-yellow-700';
+                      case 'Baja': return 'bg-gradient-to-b from-green-500 to-green-700';
+                      default: return 'bg-gradient-to-b from-gray-500 to-gray-700';
+                    }
+                  };
+                  
                   return (
                     <motion.div
                       key={item.id}
@@ -532,14 +666,24 @@ const Home: React.FC = () => {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.4, delay: index * 0.08 }}
                       whileHover={{ scale: 1.015, boxShadow: "0px 10px 25px rgba(0,0,0,0.15)" }}
-                      className={`flex flex-col md:flex-row md:items-center justify-between p-7 bg-white border border-gray-200 rounded-3xl shadow-lg transition-transform duration-300 cursor-pointer hover:border-blue-300`}
+                      className={`flex flex-col md:flex-row md:items-center justify-between p-7 bg-white border border-gray-200 rounded-3xl shadow-lg transition-transform duration-300 cursor-pointer hover:border-blue-300 relative overflow-hidden`}
                     >
-                      <div className="flex-1 space-y-3 mb-5 md:mb-0">
+                      {/* Barra lateral de color según prioridad */}
+                      <div className={`absolute left-0 top-0 bottom-0 w-2 ${getPriorityBarColor()}`}></div>
+                      
+                      {/* Efecto de brillo sutil */}
+                      <motion.div 
+                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0"
+                        whileHover={{ opacity: 1 }}
+                        transition={{ duration: 0.3 }}
+                      />
+                      
+                      <div className="flex-1 space-y-3 mb-5 md:mb-0 pl-2">
                         <div className="flex items-center space-x-4 flex-wrap gap-y-3">
                           <span className="font-extrabold text-lg text-gray-800 p-2 px-4 bg-blue-100 text-blue-800 rounded-xl shadow-inner transition-colors">
                             {item.dept}
                           </span>
-                          <span className={`px-4 py-2 rounded-xl text-sm font-bold shadow-md transition-colors ${priorityTextColor()}`}>
+                          <span className={`px-4 py-2 rounded-xl text-sm font-bold shadow-md transition-colors ${getPriorityColorClasses()}`}>
                             {item.priority}
                           </span>
                         </div>
@@ -549,9 +693,11 @@ const Home: React.FC = () => {
                             <span className="font-bold text-gray-700">ID del Reporte:</span>
                             <span className="text-blue-600 font-mono text-xs sm:text-sm bg-blue-50 p-1 px-2.5 rounded shadow-sm cursor-text select-all">{item.id}</span>
                           </div>
-                          <p><span className="font-bold text-gray-700">Reportado por:</span> {item.quienReporta || 'Desconocido'}</p>
-                          <p><span className="font-bold text-gray-700">Tipo de Problema:</span> {item.tipoProblema || 'General'}</p>
-                          <p><span className="font-bold text-gray-700">Fecha y Hora:</span> {item.time || 'N/A'}</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <p><span className="font-bold text-gray-700">Reportado por:</span> {item.quienReporta || 'Desconocido'}</p>
+                            <p><span className="font-bold text-gray-700">Tipo de Problema:</span> {item.tipoProblema || 'General'}</p>
+                            <p className="sm:col-span-2"><span className="font-bold text-gray-700">Fecha y Hora:</span> {item.time || 'N/A'}</p>
+                          </div>
                         </div>
                       </div>
                       <div className="flex flex-col sm:flex-row items-center gap-5 flex-shrink-0">
@@ -582,38 +728,68 @@ const Home: React.FC = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+              onClick={() => setDetalleReporte(null)} // Cerrar modal al clickear fuera
             >
               <motion.div
                 initial={{ scale: 0.8, y: -50, opacity: 0 }}
                 animate={{ scale: 1, y: 0, opacity: 1 }}
                 exit={{ scale: 0.8, y: -50, opacity: 0 }}
                 transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
-                className="bg-white rounded-3xl shadow-3xl max-w-xl w-full p-8 relative border border-blue-200"
+                className="bg-gradient-to-br from-white to-blue-50 rounded-3xl shadow-3xl max-w-xl w-full p-8 relative border border-blue-200 max-h-[90vh] overflow-y-auto"
+                onClick={e => e.stopPropagation()} // Evitar cerrar modal al clickear dentro
               >
+                {/* Efecto de brillo animado en el fondo */}
+                <motion.div 
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent rounded-3xl"
+                  initial={{ x: '-100%' }}
+                  animate={{ x: '100%' }}
+                  transition={{ duration: 3, repeat: Infinity, ease: "linear", repeatDelay: 2 }}
+                />
+                
                 <button
-                  className="absolute top-4 right-4 text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-300"
+                  className="absolute top-4 right-4 text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-300 z-10"
                   onClick={() => setDetalleReporte(null)}
                   title="Cerrar"
                 >
                   <X className="h-7 w-7" />
                 </button>
-                <h2 className="text-3xl sm:text-4xl font-extrabold mb-6 text-blue-900 flex items-center gap-4 border-b-2 pb-5 border-blue-100 leading-snug">
-                  <FileText className="h-10 w-10 text-blue-600" /> Detalles del Reporte
-                </h2>
-                <div className="space-y-4 text-lg text-gray-800 leading-relaxed">
-                  <DetailItem label="ID del Reporte" value={detalleReporte.id} isId />
-                  <DetailItem label="Departamento(s)" value={detalleReporte.dept} />
-                  <DetailItem label="Prioridad" value={detalleReporte.priority} type="priority" />
-                  <DetailItem label="Estado" value={detalleReporte.status} type="status" />
-                  <DetailItem label="Tipo de Problema" value={detalleReporte.tipoProblema} />
-                  <DetailItem label="Reportado por" value={detalleReporte.quienReporta} />
-                  <DetailItem label="Fecha y Hora" value={detalleReporte.time} />
+                
+                <div className="relative z-10">
+                  <h2 className="text-3xl sm:text-4xl font-extrabold mb-6 text-blue-900 flex items-center gap-4 border-b-2 pb-5 border-blue-100 leading-snug">
+                    <div className="p-3 rounded-full bg-blue-100">
+                      <FileText className="h-10 w-10 text-blue-600" />
+                    </div>
+                    Detalles del Reporte
+                  </h2>
+                  
+                  <div className="space-y-6 text-lg text-gray-800 leading-relaxed">
+                    <DetailItem label="ID del Reporte" value={detalleReporte.id} isId />
+                    <DetailItem label="Departamento(s)" value={detalleReporte.dept} />
+                    <DetailItem label="Prioridad" value={detalleReporte.priority} type="priority" />
+                    <DetailItem label="Estado" value={detalleReporte.status} type="status" />
+                    <DetailItem label="Tipo de Problema" value={detalleReporte.tipoProblema} />
+                    <DetailItem label="Reportado por" value={detalleReporte.quienReporta} />
+                    <DetailItem label="Fecha y Hora" value={detalleReporte.time} />
 
-                  <div className="border-t pt-5 mt-5 border-blue-100">
-                    <span className="font-bold text-gray-900 block mb-3 text-xl">Descripción Completa:</span>
-                    <p className="bg-gray-50 p-5 rounded-lg text-gray-700 border border-gray-100 italic shadow-inner text-base">
-                      {detalleReporte.descripcion || 'Sin descripción detallada.'}
-                    </p>
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 mt-8 border border-blue-100 shadow-inner">
+                      <h3 className="font-bold text-gray-900 text-xl mb-4 flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-blue-600" />
+                        Descripción Completa:
+                      </h3>
+                      <div className="bg-white p-5 rounded-lg text-gray-700 border border-gray-100 shadow-inner text-base whitespace-pre-wrap max-h-60 overflow-y-auto custom-scrollbar">
+                        {detalleReporte.descripcion || 'Sin descripción detallada.'}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-center mt-8">
+                    <button
+                      onClick={() => setDetalleReporte(null)}
+                      className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-semibold rounded-xl shadow-md hover:from-blue-700 hover:to-indigo-800 transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-300 flex items-center gap-2"
+                    >
+                      Cerrar
+                      <X className="h-5 w-5" />
+                    </button>
                   </div>
                 </div>
               </motion.div>
@@ -632,7 +808,7 @@ const Home: React.FC = () => {
         <Link to="/ayuda"
           className="flex items-center text-blue-700 hover:text-blue-900 font-bold text-xl hover:underline transition-all group p-5 px-8 bg-white/70 backdrop-blur-lg rounded-full shadow-lg border border-white/60 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-blue-300 transform hover:scale-105"
         >
-          <Info className="h-7 w-7 mr-3 text-blue-600 transition-transform group-hover:scale-110 group-hover:-rotate-6" />
+          <Info className="h-7 w-7 mr-3 text-blue-600 transition-transform group-hover:scale-[1.10] group-hover:-rotate-6" />
           Necesitas ayuda? Accede a nuestro <span className="font-extrabold text-blue-800 ml-1">Centro de Soporte</span>
           <span className="ml-4 text-blue-500 text-2xl transition-transform group-hover:translate-x-2 transform duration-300">→</span>
         </Link>
@@ -657,21 +833,21 @@ const DetailItem: React.FC<DetailItemProps> = ({ label, value, type, isId }) => 
     valueClasses += " font-mono text-sm sm:text-base bg-blue-50 px-2 py-1 rounded shadow-sm break-all";
   }
 
-  // Refactored nested ternary operations into a separate function/variable for clarity
   const getValueColorClass = (itemType: 'priority' | 'status' | undefined, itemValue: string | number | undefined | null): string => {
     switch (itemType) {
       case 'priority':
         if (itemValue === 'Crítica') return 'text-red-600';
         if (itemValue === 'Alta') return 'text-orange-500';
         if (itemValue === 'Media') return 'text-yellow-600';
-        return 'text-green-600';
+        if (itemValue === 'Baja') return 'text-green-600';
+        return 'text-gray-700';
       case 'status':
         if (itemValue === 'Pendiente') return 'text-red-500';
         if (itemValue === 'En Proceso') return 'text-amber-600';
         if (itemValue === 'Resuelto') return 'text-emerald-600';
         return 'text-gray-500';
       default:
-        return 'text-gray-700'; // Default for non-priority/status items
+        return 'text-gray-700';
     }
   };
 
@@ -686,10 +862,5 @@ const DetailItem: React.FC<DetailItemProps> = ({ label, value, type, isId }) => 
     </div>
   );
 };
-
-// Función de ejemplo para usar axios con AxiosRequestConfig
-
-// Nota: Esta función no se llama automáticamente para evitar errores en la carga
-// Se puede llamar manualmente cuando sea necesario con: fetchData();
 
 export default Home;

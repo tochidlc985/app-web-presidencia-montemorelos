@@ -2,7 +2,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Home, FileText, BarChart3, QrCode, Menu, X, User, LogOut } from 'lucide-react'; // Iconos de Lucide
+import { Home, FileText, BarChart3, QrCode, Menu, X, User, LogOut, Settings } from 'lucide-react'; // Iconos de Lucide
 import { useAuth } from '../context/AuthContext';
 import LogoutConfirmationModal from './LogoutConfirmationModal'; // Asegúrate de la ruta correcta
 
@@ -43,6 +43,7 @@ const Navigation = () => {
     { path: '/reporte', label: 'Nuevo Reporte', icon: FileText, color: 'from-emerald-500 to-emerald-600' },
     { path: '/dashboard', label: 'Dashboard', icon: BarChart3, color: 'from-purple-600 to-purple-700' },
     { path: '/qr', label: 'Código QR', icon: QrCode, color: 'from-orange-500 to-orange-600' },
+    { path: '/settings', label: 'Configuración', icon: Settings, color: 'from-gray-600 to-gray-700' },
   ]), []);
 
   // Elemento específico para perfil, condicionalmente si hay sesión

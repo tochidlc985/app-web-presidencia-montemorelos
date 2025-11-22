@@ -2,12 +2,23 @@
 import React, { useEffect, useState, ChangeEvent, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Mail, Building, Shield, Calendar, Camera, XCircle, Home, Edit2, CheckCircle, Clock, HelpCircle, ZoomIn, ZoomOut, RotateCcw, Download, Share2, AlertCircle, Info, QrCode, Tag } from 'lucide-react'; // Agregué Tag para los roles
+import { User, Mail, Building, Shield, Calendar, Camera, XCircle, Home, Edit2, CheckCircle, Clock, HelpCircle, ZoomIn, ZoomOut, RotateCcw, Download, Share2, AlertCircle, Info, QrCode, Tag, Lock, Unlock, Eye, EyeOff } from 'lucide-react'; // Agregamos nuevos iconos
 import { useAuth } from '../context/AuthContext';
-import toast from 'react-hot-toast'; // Importar react-hot-toast directamente
+import toast from 'react-hot-toast';
 import { getUserProfile, updateUserProfile as updateUserProfileService, uploadProfilePhoto, deleteProfilePhoto } from '../services/profileService';
 
 // region: Interfaces y Configuración
+
+// Componente para mostrar tooltips de ayuda
+const Tooltip: React.FC<{ text: string; children: React.ReactNode }> = ({ text, children }) => (
+  <div className="relative group inline-block">
+    {children}
+    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block bg-black text-white text-xs rounded py-1 px-2 whitespace-nowrap z-50">
+      {text}
+      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-t-black border-l-transparent border-r-transparent"></div>
+    </div>
+  </div>
+);
 
 interface Usuario {
   _id?: string;
@@ -18,11 +29,17 @@ interface Usuario {
   foto?: string | null;
   fechaRegistro?: string;
   genero?: 'masculino' | 'femenino' | 'otro';
-  // Propiedades para manipular la foto en el frontend, que podrían ser guardadas en backend si se quiere persistir la edición.
+  telefono?: string;
+  bio?: string;
+  // Propiedades para manipular la foto en el frontend
   fotoZoom?: number;
   fotoRotation?: number;
   fotoPositionX?: number;
   fotoPositionY?: number;
+  // Propiedad para indicar si es un nuevo perfil
+  esNuevoPerfil?: boolean;
+  // Nueva propiedad para privacidad
+  perfilPublico?: boolean;
   [key: string]: any;
 }
 
@@ -80,52 +97,6 @@ const ALLOWED_IMG_TYPES = [
   'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'
 ];
 
-// Helper para actualizar perfil en el backend
-const updateUserProfile = async (userData: Usuario): Promise<Usuario> => {
-  try {
-    if (!userData.email) {
-      throw new Error('El email del usuario es requerido para actualizar el perfil');
-    }
-    
-    const payload = { ...userData };
-    delete payload.fotoZoom;
-    delete payload.fotoRotation;
-    delete payload.fotoPositionX;
-    delete payload.fotoPositionY;
-    
-    // Simular llamada a API - reemplazar con tu endpoint real
-    console.log('Enviando datos al backend:', payload);
-    
-    // Simulación de respuesta exitosa
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(userData);
-      }, 500);
-    });
-    
-    // Para implementación real, descomentar:
-    /*
-    const response = await fetch('/api/users/profile', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
-      body: JSON.stringify(payload)
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Error del servidor: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data.user || userData;
-    */
-  } catch (error: any) {
-    console.error('Error updating user profile:', error);
-    throw error;
-  }
-};
 
 // Función para guardar los datos del usuario en tiempo real
 const saveUserDataInRealTime = async (userData: Usuario): Promise<Usuario> => {
@@ -170,13 +141,23 @@ const saveUserDataInRealTime = async (userData: Usuario): Promise<Usuario> => {
           rol: basePayload.rol || 'usuario'
         };
 
+        // Marcar que es un nuevo perfil para evitar bucles
+        newUserPayload.esNuevoPerfil = true;
+
         const updatedUser = await updateUserProfileService(newUserPayload);
         console.log('Nuevo perfil creado exitosamente');
         return updatedUser;
       } catch (createError: any) {
         console.error('Error al crear nuevo perfil:', createError);
-        throw createError;
+        // Si falla la creación, mostrar un mensaje más amigable al usuario
+        throw new Error('No se pudo crear o actualizar el perfil. Por favor, contacte al administrador.');
       }
+    }
+
+    // Si el error es 403 (permisos), mostrar un mensaje específico
+    if (error.response?.status === 403) {
+      console.error('Error de permisos:', error);
+      throw new Error('No tienes permisos para actualizar el perfil. Por favor, inicia sesión nuevamente.');
     }
 
     throw error;
@@ -195,7 +176,8 @@ const Profile: React.FC = (): JSX.Element => {
   const [fotoPreview, setFotoPreview] = useState<string | null>(null); // URL/Base64 para previsualización de la foto
   const [tiempoActivo, setTiempoActivo] = useState({ dias: 0, horas: 0, minutos: 0, segundos: 0 }); // Tiempo de la cuenta activa
   const [mostrarPreguntas, setMostrarPreguntas] = useState(false); // Toggle de FAQs
-  const [isSaving, setIsSaving] = useState(false); // Nuevo estado para controlar el guardado
+  const [mostrarBioCompleta, setMostrarBioCompleta] = useState(false); // Toggle para mostrar bio completa
+  const [mostrarEmail, setMostrarEmail] = useState(false); // Toggle para mostrar email público
   
   // Estados para manipulación de la imagen
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -204,8 +186,11 @@ const Profile: React.FC = (): JSX.Element => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const dragStartRef = useRef({ x: 0, y: 0 }); // Ref para el inicio del drag
 
+  // Referencia para almacenar el ID del timeout del debounce
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
   // Autoguardado: Cuando `form` cambia y estamos en modo edición
-  const saveUserDataLocally = useCallback(async (data: Usuario) => {
+  const saveUserDataLocally = useCallback(async (data: Usuario, showToast: boolean = true) => {
     try {
       // Guardar en localStorage para persistencia básica
       localStorage.setItem('usuario', JSON.stringify(data));
@@ -228,15 +213,21 @@ const Profile: React.FC = (): JSX.Element => {
           delete payload.fotoPositionY;
 
           await saveUserDataInRealTime(payload);
-          showThemedToast('Cambios guardados automáticamente', 'success');
+          if (showToast) {
+            showThemedToast('Cambios guardados automáticamente', 'success');
+          }
         } catch (apiError: any) {
           console.error('Error al guardar en el backend:', apiError);
-          showThemedToast('Cambios guardados localmente. Error al sincronizar con servidor.', 'warning');
+          if (showToast) {
+            showThemedToast('Cambios guardados localmente. Error al sincronizar con servidor.', 'warning');
+          }
         }
       }
     } catch (error) {
       console.error('Error al guardar datos en tiempo real:', error);
-      showThemedToast('Error al guardar cambios', 'error');
+      if (showToast) {
+        showThemedToast('Error al guardar cambios', 'error');
+      }
     }
   }, [edit, setUsuario]);
 
@@ -312,6 +303,7 @@ const Profile: React.FC = (): JSX.Element => {
     // Limpieza al desmontar o re-ejecutar el efecto
     return () => {
       if (intervalId) clearInterval(intervalId);
+      if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
@@ -339,6 +331,7 @@ const Profile: React.FC = (): JSX.Element => {
 
   // Validación de campos
   const validateEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const validatePhone = (phone: string): boolean => /^\+?[0-9]{10,15}$/.test(phone.replace(/\s/g, ''));
 
   const validateProfileForm = useCallback((data: Usuario): string | null => {
     const errors = [];
@@ -364,7 +357,7 @@ const Profile: React.FC = (): JSX.Element => {
     return errors.length > 0 ? errors.join('. ') : null;
   }, []);
 
-  // Manejador de cambios en inputs del formulario con autoguardado
+  // Manejador de cambios en inputs del formulario con autoguardado y debounce
   const handleInputChange = (
     e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
@@ -382,13 +375,19 @@ const Profile: React.FC = (): JSX.Element => {
 
     setForm(prevForm => {
         const newForm = { ...prevForm, [name]: updatedValue };
+        // Si estamos en modo edición, guardar con debounce
         if (edit) {
-            // Usar setTimeout para evitar actualizar el estado durante el renderizado
-            setTimeout(() => {
-              saveUserDataLocally(newForm).catch(error => {
-                console.error('Error en autoguardado:', error);
-              });
-            }, 0);
+            // Limpiar el timeout anterior si existe
+            if (debounceTimeoutRef.current) {
+                clearTimeout(debounceTimeoutRef.current);
+            }
+            
+            // Configurar un nuevo timeout para guardar después de 1.5 segundos
+            debounceTimeoutRef.current = setTimeout(() => {
+                saveUserDataLocally(newForm, false).catch(error => {
+                    console.error('Error en autoguardado:', error);
+                });
+            }, 1500);
         }
         return newForm;
     });
@@ -801,37 +800,65 @@ const Profile: React.FC = (): JSX.Element => {
   }
 
   return (
-    // Fondo y contenedor principal con animaciones de ondas de colores
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-blue-50 to-green-50 p-4 sm:p-6 lg:p-8 font-inter antialiased relative overflow-hidden">
-      {/* Círculos de fondo animados (blobs) */}
-      <div className="absolute inset-0 mix-blend-multiply opacity-50 z-0">
+    // Fondo y contenedor principal con animaciones de ondas de colores mejoradas
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-blue-50 to-emerald-50 p-4 sm:p-6 lg:p-8 font-inter antialiased relative overflow-hidden">
+      {/* Círculos de fondo animados (blobs) mejorados */}
+      <div className="absolute inset-0 mix-blend-multiply opacity-40 z-0">
         <motion.div
-            initial={{ x: -100, y: -100, opacity: 0 }}
-            animate={{ x: [-100, 1000], y: [-100, 800], opacity: [0, 0.4, 0] }}
-            transition={{ duration: 40, repeat: Infinity, ease: "linear" as const }}
-            className="w-80 h-80 rounded-full bg-blue-300 absolute blur-2xl"
+            initial={{ x: -200, y: -200, opacity: 0 }}
+            animate={{ x: [-200, 1200], y: [-200, 1000], opacity: [0, 0.5, 0] }}
+            transition={{ duration: 50, repeat: Infinity, ease: "linear" as const }}
+            className="w-96 h-96 rounded-full bg-gradient-to-r from-blue-300 to-indigo-300 absolute blur-3xl"
         ></motion.div>
         <motion.div
-            initial={{ x: 800, y: 100, opacity: 0 }}
-            animate={{ x: [800, -200], y: [100, 900], opacity: [0, 0.4, 0] }}
-            transition={{ duration: 35, repeat: Infinity, ease: "linear" as const }}
-            className="w-96 h-96 rounded-full bg-purple-300 absolute blur-2xl"
-        ></motion.div>
-        <motion.div
-            initial={{ x: 400, y: 700, opacity: 0 }}
-            animate={{ x: [400, 0], y: [700, -200], opacity: [0, 0.3, 0] }}
+            initial={{ x: 1000, y: 200, opacity: 0 }}
+            animate={{ x: [1000, -300], y: [200, 1100], opacity: [0, 0.5, 0] }}
             transition={{ duration: 45, repeat: Infinity, ease: "linear" as const }}
-            className="w-72 h-72 rounded-full bg-green-300 absolute blur-2xl"
+            className="w-[28rem] h-[28rem] rounded-full bg-gradient-to-r from-purple-300 to-pink-300 absolute blur-3xl"
         ></motion.div>
+        <motion.div
+            initial={{ x: 500, y: 800, opacity: 0 }}
+            animate={{ x: [500, -100], y: [800, -300], opacity: [0, 0.4, 0] }}
+            transition={{ duration: 55, repeat: Infinity, ease: "linear" as const }}
+            className="w-80 h-80 rounded-full bg-gradient-to-r from-emerald-300 to-teal-300 absolute blur-3xl"
+        ></motion.div>
+        {/* Partículas flotantes */}
+        {[...Array(15)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute rounded-full bg-white/20"
+            style={{
+              width: `${Math.random() * 10 + 5}px`,
+              height: `${Math.random() * 10 + 5}px`,
+              top: `${Math.random() * 100}%`,
+              left: `${Math.random() * 100}%`,
+            }}
+            animate={{
+              y: [0, -Math.random() * 100 - 50],
+              x: [0, (Math.random() - 0.5) * 100],
+              opacity: [0, 0.7, 0],
+            }}
+            transition={{
+              duration: Math.random() * 10 + 10,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: Math.random() * 5,
+            }}
+          />
+        ))}
       </div>
 
-      {/* Contenedor principal del perfil con estilo Glassmorphism y animaciones */}
+      {/* Contenedor principal del perfil con estilo Glassmorphism mejorado y animaciones */}
       <motion.div
         initial={{ opacity: 0, scale: 0.8, y: 50 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ type: 'spring' as const, stiffness: 100, damping: 10, delay: 0.2 }}
-        className="relative z-10 w-full max-w-5xl bg-white/95 backdrop-blur-3xl rounded-[2.5rem] shadow-3xl border border-gray-100 p-8 sm:p-10 transform hover:scale-[1.005] hover:shadow-2xl transition-all duration-300" // Reduced hover scale for subtle effect
+        className="relative z-10 w-full max-w-5xl bg-white/90 backdrop-blur-3xl rounded-[3rem] shadow-2xl border border-white/20 p-8 sm:p-10 transform hover:scale-[1.01] hover:shadow-3xl transition-all duration-500 overflow-hidden"
       >
+        {/* Elementos decorativos del contenedor */}
+        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
+        <div className="absolute -top-10 -right-10 w-20 h-20 rounded-full bg-gradient-to-r from-blue-400 to-purple-400 opacity-20 blur-xl"></div>
+        <div className="absolute -bottom-10 -left-10 w-32 h-32 rounded-full bg-gradient-to-r from-emerald-400 to-teal-400 opacity-20 blur-xl"></div>
         {/* Sección de la foto de perfil y el encabezado de información del usuario */}
         <div className="flex flex-col md:flex-row items-center md:items-start gap-8 mb-8 pb-8 border-b-2 border-gray-100">
           {/* Contenedor de la Foto de Perfil */}
@@ -1150,6 +1177,130 @@ const Profile: React.FC = (): JSX.Element => {
                      : 'No especificado'}
 
                     </span>
+                  )}
+                </div>
+              </motion.div>
+              {/* Teléfono */}
+              <motion.div initial={{opacity: 0, y: 20}} animate={{opacity: 1, y: 0}} transition={{delay: 0.9}} className="bg-white/80 rounded-2xl p-5 shadow-lg border border-blue-100 flex flex-col items-start gap-3 hover:scale-[1.005] transition-all duration-300 transform-gpu group">
+                <div className="bg-blue-100/70 p-3 rounded-xl text-blue-700 flex-shrink-0 transition-colors group-hover:bg-blue-200">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                </div>
+                <div className="w-full">
+                  <span className="block font-semibold text-gray-700 mb-1">Teléfono:</span>
+                  {edit ? (
+                    <>
+                    <input
+                      type="tel"
+                      name="telefono"
+                      value={form.telefono || ''}
+                      onChange={handleInputChange}
+                      placeholder="+52 123 456 7890"
+                      className="w-full border-2 border-blue-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-3 focus:ring-blue-400 transition bg-white text-blue-900"
+                    />
+                    <p className="text-xs text-gray-500 mt-1 self-end">Formato: +52 123 456 7890</p>
+                    </>
+                  ) : (
+                    <span className="text-blue-900 font-medium text-lg">{displayUsuario.telefono || 'No disponible'}</span>
+                  )}
+                </div>
+              </motion.div>
+              {/* Biografía */}
+              <motion.div initial={{opacity: 0, y: 20}} animate={{opacity: 1, y: 0}} transition={{delay: 1.0}} className="bg-white/80 rounded-2xl p-5 shadow-lg border border-blue-100 flex flex-col items-start gap-3 hover:scale-[1.005] transition-all duration-300 transform-gpu group md:col-span-2">
+                <div className="bg-blue-100/70 p-3 rounded-xl text-blue-700 flex-shrink-0 transition-colors group-hover:bg-blue-200">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div className="w-full">
+                  <span className="block font-semibold text-gray-700 mb-1">Biografía:</span>
+                  {edit ? (
+                    <textarea
+                      name="bio"
+                      value={form.bio || ''}
+                      onChange={handleInputChange}
+                      placeholder="Cuéntanos sobre ti..."
+                      className="w-full border-2 border-blue-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-3 focus:ring-blue-400 transition bg-white text-blue-900 min-h-[100px]"
+                      maxLength={300}
+                    />
+                  ) : (
+                    <div>
+                      <p className="text-blue-900 font-medium text-lg">
+                        {displayUsuario.bio ? 
+                          (mostrarBioCompleta ? displayUsuario.bio : `${displayUsuario.bio.substring(0, 150)}${displayUsuario.bio.length > 150 ? '...' : ''}`) : 
+                          'No disponible'}
+                      </p>
+                      {displayUsuario.bio && displayUsuario.bio.length > 150 && (
+                        <button 
+                          onClick={() => setMostrarBioCompleta(!mostrarBioCompleta)}
+                          className="text-blue-600 hover:text-blue-800 text-sm font-medium mt-2 flex items-center gap-1"
+                        >
+                          {mostrarBioCompleta ? (
+                            <>
+                              <EyeOff className="w-4 h-4" /> Ver menos
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-4 h-4" /> Ver más
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {edit && (
+                    <p className="text-xs text-gray-500 mt-1 self-end">
+                      {form.bio ? form.bio.length : 0}/300 caracteres
+                    </p>
+                  )}
+                </div>
+              </motion.div>
+              {/* Privacidad */}
+              <motion.div initial={{opacity: 0, y: 20}} animate={{opacity: 1, y: 0}} transition={{delay: 1.1}} className="bg-white/80 rounded-2xl p-5 shadow-lg border border-blue-100 flex flex-col items-start gap-3 hover:scale-[1.005] transition-all duration-300 transform-gpu group">
+                <div className="bg-blue-100/70 p-3 rounded-xl text-blue-700 flex-shrink-0 transition-colors group-hover:bg-blue-200">
+                  {form.perfilPublico ? (
+                    <Unlock className="w-6 h-6" />
+                  ) : (
+                    <Lock className="w-6 h-6" />
+                  )}
+                </div>
+                <div>
+                  <span className="block font-semibold text-gray-700 mb-1">Privacidad del Perfil:</span>
+                  {edit ? (
+                    <div className="flex items-center gap-3 mt-2">
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="perfilPublico"
+                          checked={form.perfilPublico || false}
+                          onChange={(e) => handleInputChange({
+                            target: {
+                              name: 'perfilPublico',
+                              value: e.target.checked,
+                              type: 'checkbox'
+                            }
+                          } as any)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                      <span className="text-blue-900 font-medium">
+                        {form.perfilPublico ? 'Perfil público' : 'Perfil privado'}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      {form.perfilPublico ? (
+                        <span className="text-green-600 font-medium flex items-center gap-1">
+                          <Unlock className="w-5 h-5" /> Perfil público
+                        </span>
+                      ) : (
+                        <span className="text-amber-600 font-medium flex items-center gap-1">
+                          <Lock className="w-5 h-5" /> Perfil privado
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               </motion.div>

@@ -1,4 +1,4 @@
-// Configuración centralizada de la API - Simplificada y consistente
+// Configuración centralizada de la API - Optimizada para móviles y Vercel
 
 // URL base para la API - usar URL absoluta para evitar problemas con el proxy
 export const API_BASE_URL = typeof window !== 'undefined'
@@ -6,16 +6,24 @@ export const API_BASE_URL = typeof window !== 'undefined'
       ? `${window.location.origin}/api`
       : (window.location.hostname.includes('localhost')
           ? `${window.location.origin}/api`
-          : '/api'))
+          : `${window.location.protocol}//${window.location.hostname}/api`))
   : '/api';
 
-// URL absoluta para casos especiales
-export const ABSOLUTE_API_BASE_URL = typeof window !== 'undefined' 
-  ? `${window.location.origin}/api` 
+// URL absoluta para casos especiales - mejorada para móviles
+export const ABSOLUTE_API_BASE_URL = typeof window !== 'undefined'
+  ? `${window.location.origin}/api`
   : '/api';
 
-// URL ajustada para evitar problemas
-export const ADJUSTED_API_BASE_URL = 'http://localhost:4000/api';
+// URL ajustada para evitar problemas - con soporte para HTTPS
+export const ADJUSTED_API_BASE_URL = typeof window !== 'undefined' && window.location.hostname.includes('localhost')
+  ? 'http://localhost:5000/api'
+  : '/api';
+
+// Detectar si estamos en un dispositivo móvil
+export const isMobile = typeof window !== 'undefined' && (
+  /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(window.navigator.userAgent) ||
+  (window.innerWidth <= 768)
+);
 
 // Endpoints de la API
 export const API_ENDPOINTS = {

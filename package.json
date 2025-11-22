@@ -6,16 +6,18 @@
   "description": "Sistema de Reportes para la Presidencia Municipal de Montemorelos",
   "author": "Presidencia Municipal de Montemorelos",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 5173",
+    "dev": "vite --host 0.0.0.0 --port 6173 --strictPort",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node server.js",
     "server": "node server.js",
+    "start:backend": "node server.js",
     "test-db": "node test-server.js",
     "build-local": "npm run build",
     "start-local": "npm run dev",
-    "vercel-build": "npm run build"
+    "vercel-build": "npm run build",
+    "deploy-vercel": "node deploy-vercel.js"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

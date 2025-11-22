@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { motion } from 'framer-motion';
+import './styles/themes.css';
 
 import AppLayout from './components/AppLayout';
 import ReportForm from './pages/ReportForm';
@@ -10,17 +11,26 @@ import QRGenerator from './pages/QRGenerator';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Profile from './pages/Profile';
+import Settings from './pages/Settings';
 import Home from './pages/Home';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { GlobalSettingsProvider } from './context/GlobalSettingsContext';
+import GlobalSettingsApplier from './components/GlobalSettingsApplier';
 import Logout from './pages/Logout';
 
 const App = () => {
   return (
     <Router>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
+      <ThemeProvider>
+        <GlobalSettingsProvider>
+          <AuthProvider>
+            <GlobalSettingsApplier />
+            <AppContent />
+          </AuthProvider>
+        </GlobalSettingsProvider>
+      </ThemeProvider>
       <Toaster
         position="top-right"
         toastOptions={{
@@ -57,7 +67,7 @@ const AppContent: React.FC = () => {
 
   if (!isClient || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
           <p className="text-blue-600 font-medium">Cargando aplicación...</p>
@@ -68,7 +78,7 @@ const AppContent: React.FC = () => {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -80,7 +90,7 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
       <AppLayout>
         <motion.div
           initial={{ opacity: 0 }}
@@ -95,6 +105,7 @@ const AppContent: React.FC = () => {
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/qr" element={<ProtectedRoute><QRGenerator /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/home" replace />} />
           </Routes>
         </motion.div>

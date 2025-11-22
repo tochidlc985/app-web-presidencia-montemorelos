@@ -1,13 +1,10 @@
-import { useState, ChangeEvent, FormEvent, DragEvent, useRef } from 'react';
+import { useState, ChangeEvent, FormEvent, DragEvent, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-// Importamos tipos específicos de Framer Motion para mayor precisión si fuera necesario
-// import type { AnimationProps, TargetAndTransition, Variants, Easing } from 'framer-motion';
 
 import {
   Send, UploadCloud, X, Phone, Mail, User, FileText, Image, Building, AlertCircle,
   Loader2, Info, CheckCircle, Lightbulb, MapPin, List, Eye,
-  FileInput, Sparkles, FolderKanban, ChevronDown // Añadido ChevronDown para el select
-} from 'lucide-react';
+  FileInput, Sparkles, FolderKanban} from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api';
 import { API_ENDPOINTS } from '../services/apiConfig';
@@ -148,16 +145,17 @@ const ReportForm = () => {
   const [aclaracionRespuestas, setAclaracionRespuestas] = useState<AclaracionRespuestas>({});
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [isDragActive, setIsDragActive] = useState(false);
+  const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const prioridades = [
-    { value: 'Baja', label: 'Baja', color: 'from-emerald-500 to-emerald-600' },
-    { value: 'Media', label: 'Media', color: 'from-amber-500 to-amber-600' },
-    { value: 'Alta', label: 'Alta', color: 'from-orange-500 to-orange-600' },
-    { value: 'Crítica', label: 'Crítica', color: 'from-red-600 to-red-700' }
-  ];
+  const prioridades = useMemo(() => [
+    { value: 'Baja', label: 'Baja', color: 'from-emerald-500 to-emerald-600', hoverBg: 'group-hover:bg-gradient-to-r group-hover:from-emerald-500 group-hover:to-emerald-600', ringColor: 'emerald-600' },
+    { value: 'Media', label: 'Media', color: 'from-amber-500 to-amber-600', hoverBg: 'group-hover:bg-gradient-to-r group-hover:from-amber-500 group-hover:to-amber-600', ringColor: 'amber-600' },
+    { value: 'Alta', label: 'Alta', color: 'from-orange-500 to-orange-600', hoverBg: 'group-hover:bg-gradient-to-r group-hover:from-orange-500 group-hover:to-orange-600', ringColor: 'orange-600' },
+    { value: 'Crítica', label: 'Crítica', color: 'from-red-600 to-red-700', hoverBg: 'group-hover:bg-gradient-to-r group-hover:from-red-600 group-hover:to-red-700', ringColor: 'red-700' }
+  ], []);
 
-  const tiposProblema = Object.keys(aclaracionPreguntas);
+  const tiposProblema = useMemo(() => Object.keys(aclaracionPreguntas), []);
 
   const showCustomToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     toast(message, {
@@ -173,7 +171,7 @@ const ReportForm = () => {
     });
   };
 
-  const validateForm = (): boolean => {
+  const validateForm = useCallback((): boolean => {
     const newErrors: ValidationErrors = {};
 
     if (!formData.email) newErrors.email = 'El correo electrónico es obligatorio.';
@@ -210,21 +208,70 @@ const ReportForm = () => {
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [formData, aclaracionRespuestas]); // Añadidas dependencias al useCallback
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value, type } = e.target;
+  // Función para calcular el progreso del formulario
+  const calculateProgress = useCallback(() => {
+    let completedFields = 0;
+    const totalFields = 7; // Total de campos obligatorios
+
+    // Verificar cada campo obligatorio
+    if (formData.email && /^\S+@\S+\.\S+$/.test(formData.email)) completedFields++;
+    if (formData.telefono && /^[0-9]{10}$/.test(formData.telefono)) completedFields++;
+    if (formData.quienReporta && formData.quienReporta.trim().length >= 3) completedFields++;
     
+    // Departamentos
+    if (formData.departamento && formData.departamento.length > 0) {
+      if (formData.departamento.includes('Otro') && formData.otroDepartamentoEspecifico?.trim()) {
+        completedFields++;
+      } else if (!formData.departamento.includes('Otro')) {
+        completedFields++;
+      }
+    }
+    
+    // Tipo de problema
+    if (formData.tipoProblema) {
+      completedFields++;
+      
+      // Verificar preguntas de aclaración
+      const relevantQuestions = aclaracionPreguntas[formData.tipoProblema];
+      if (relevantQuestions && relevantQuestions.length > 0) {
+        const totalQuestions = relevantQuestions.length;
+        let answeredQuestions = 0;
+        
+        relevantQuestions.forEach((_, idx) => {
+          if (aclaracionRespuestas[idx] && aclaracionRespuestas[idx].trim() !== '') {
+            answeredQuestions++;
+          }
+        });
+        
+        // Añadir proporción de preguntas respondidas
+        completedFields += answeredQuestions / totalQuestions;
+      }
+    }
+    
+    if (formData.prioridad) completedFields++;
+    if (formData.descripcion && formData.descripcion.length >= 20) completedFields++;
+
+    // Calcular porcentaje (máximo 100%)
+    const newProgress = Math.min(100, Math.round((completedFields / totalFields) * 100));
+    setProgress(newProgress);
+    return newProgress;
+  }, [formData, aclaracionRespuestas]);
+
+  const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+
     if (type === 'checkbox') {
       const target = e.target as HTMLInputElement;
       const { checked } = target;
-      
+
       if (name === 'departamento') {
         setFormData(prev => {
           const newDepartamentos = checked
             ? [...prev.departamento, value]
             : prev.departamento.filter(dept => dept !== value);
-          
+
           if (!checked && value === 'Otro') {
             return { ...prev, departamento: newDepartamentos, otroDepartamentoEspecifico: '' };
           }
@@ -242,118 +289,122 @@ const ReportForm = () => {
       }
     }
     setErrors(prev => ({ ...prev, [name]: undefined, aclaracionRespuestas: undefined }));
-  };
-  
-  const handleAclaracionChange = (index: number, value: string) => {
+    // Actualizar progreso después de cada cambio
+    setTimeout(() => calculateProgress(), 0);
+  }, [calculateProgress]);
+
+  const handleAclaracionChange = useCallback((index: number, value: string) => {
     setAclaracionRespuestas(prev => ({
       ...prev,
       [index]: value
     }));
     setErrors(prev => ({ ...prev, aclaracionRespuestas: undefined }));
-  };
+    // Actualizar progreso después de cada cambio
+    setTimeout(() => calculateProgress(), 0);
+  }, [calculateProgress]);
 
-  const handleDropzoneClick = () => {
+  const handleDropzoneClick = useCallback(() => {
     fileInputRef.current?.click();
-  };
+  }, []);
 
-  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+  const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragActive(true);
-  };
+  }, []);
 
-  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+  const handleDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragActive(false);
-  };
+  }, []);
 
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+  const handleDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragActive(false);
-    
+
     const files = Array.from(e.dataTransfer.files);
     processFiles(files);
-  };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps - processFiles is stable as it uses internal state/props
 
-  const handleFileInput = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleFileInput = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
     processFiles(files);
     e.target.value = '';
-  };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps - processFiles is stable
 
-const MAX_FILES = 5;
-const MAX_SIZE = 15 * 1024 * 1024;
-const allowedTypes = [
-  'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-  'video/mp4', 'video/webm',
-  'application/pdf'
-];
+  const MAX_FILES = 5;
+  const MAX_SIZE = 15 * 1024 * 1024; // 15 MB
+  const allowedTypes = useMemo(() => [
+    'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+    'video/mp4', 'video/webm',
+    'application/pdf'
+  ], []);
 
-const processFiles = (files: File[]) => {
-  let filesToProcess = files;
-  let messages: string[] = [];
+  const processFiles = useCallback((files: File[]) => {
+    let filesToProcess = files;
+    const messages: string[] = [];
 
-  filesToProcess = filesToProcess.filter(newFile => 
-    !uploadedFiles.some(existingFile => existingFile.name === newFile.name && existingFile.size === newFile.size)
-  );
+    filesToProcess = filesToProcess.filter(newFile =>
+      !uploadedFiles.some(existingFile => existingFile.name === newFile.name && existingFile.size === newFile.size)
+    );
 
-  const newValidFiles: File[] = [];
+    const newValidFiles: File[] = [];
 
-  for (const file of filesToProcess) {
-    let isValid = true;
-    
-    if (!allowedTypes.includes(file.type)) {
-      isValid = false;
-      messages.push(`Tipo de archivo no permitido para "${file.name}": ${file.type}.`);
+    for (const file of filesToProcess) {
+      let isValid = true;
+
+      if (!allowedTypes.includes(file.type)) {
+        isValid = false;
+        messages.push(`Tipo de archivo no permitido para "${file.name}": ${file.type}.`);
+      }
+      if (file.size > MAX_SIZE) {
+        isValid = false;
+        messages.push(`Archivo "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)}MB) excede el límite (Máx ${MAX_SIZE / (1024 * 1024)}MB).`);
+      }
+
+      if (isValid) {
+        newValidFiles.push(file);
+      }
     }
-    if (file.size > MAX_SIZE) {
-      isValid = false;
-      messages.push(`Archivo "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)}MB) excede el límite (Máx ${MAX_SIZE / (1024 * 1024)}MB).`);
+
+    const currentTotalFiles = uploadedFiles.length;
+    if (currentTotalFiles + newValidFiles.length > MAX_FILES) {
+      const excessFiles = (currentTotalFiles + newValidFiles.length) - MAX_FILES;
+      // Remover los archivos extra de newValidFiles para ajustarse al límite
+      for (let i = 0; i < excessFiles; i++) {
+        const removedFile = newValidFiles.pop();
+        if (removedFile) messages.push(`Se ha omitido el archivo "${removedFile.name}" para respetar el límite de ${MAX_FILES} archivos.`);
+      }
     }
-    
-    if (isValid) {
-      newValidFiles.push(file);
+
+    if (newValidFiles.length > 0) {
+      setUploadedFiles(prev => [...prev, ...newValidFiles]);
+      showCustomToast(`${newValidFiles.length} archivo(s) agregado(s).`, 'success');
     }
-  }
 
-  const currentTotalFiles = uploadedFiles.length;
-  if (currentTotalFiles + newValidFiles.length > MAX_FILES) {
-    const excessFiles = (currentTotalFiles + newValidFiles.length) - MAX_FILES;
-    for(let i = 0; i < excessFiles; i++) {
-        const removedFile = newValidFiles.pop(); 
-        if(removedFile) messages.push(`Se ha omitido el archivo "${removedFile.name}" para respetar el límite de ${MAX_FILES} archivos.`);
+    if (messages.length > 0) {
+      messages.forEach(msg => toast.error(msg, { duration: 5000 }));
     }
-  }
-
-  if (newValidFiles.length > 0) {
-    setUploadedFiles(prev => [...prev, ...newValidFiles]);
-    showCustomToast(`${newValidFiles.length} archivo(s) agregado(s).`, 'success');
-  }
-
-  if (messages.length > 0) {
-    messages.forEach(msg => toast.error(msg, { duration: 5000 }));
-  }
-};
+  }, [uploadedFiles, allowedTypes]);
 
 
-  const removeFile = (indexToRemove: number) => {
-    const newFiles = uploadedFiles.filter((_, i) => i !== indexToRemove);
-    setUploadedFiles(newFiles);
+  const removeFile = useCallback((indexToRemove: number) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== indexToRemove));
     showCustomToast('Archivo removido.', 'info');
-  };
+  }, []);
 
-  const getFileIcon = (fileType: string) => {
+  const getFileIcon = useCallback((fileType: string) => {
     if (fileType.startsWith('image/')) return <Image className="h-6 w-6 text-indigo-500" />;
     if (fileType.startsWith('video/')) return <Eye className="h-6 w-6 text-red-500" />;
     if (fileType === 'application/pdf') return <FileText className="h-6 w-6 text-purple-500" />;
     return <FileInput className="h-6 w-6 text-gray-500" />;
-  };
+  }, []);
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = useCallback(async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       toast.error('Por favor, corrige los errores en el formulario para continuar.', { duration: 4000 });
       const firstErrorField = document.querySelector('.border-red-500') as HTMLElement;
@@ -374,7 +425,7 @@ const processFiles = (files: File[]) => {
 
       const relevantQuestions = aclaracionPreguntas[formData.tipoProblema] || [];
       const finalAclaracionRespuestas: Record<string, string> = {};
-      
+
       relevantQuestions.forEach((question, index) => {
         if (aclaracionRespuestas[index]) {
           finalAclaracionRespuestas[question] = aclaracionRespuestas[index];
@@ -396,10 +447,10 @@ const processFiles = (files: File[]) => {
 
       // Crear FormData para enviar los archivos y los datos del reporte
       const requestFormData = new FormData();
-      
+
       // Agregar los datos del reporte como JSON string
       requestFormData.append('data', JSON.stringify(reportDataToSend));
-      
+
       // Agregar los archivos
       uploadedFiles.forEach(file => {
         requestFormData.append('imagenes', file);
@@ -423,7 +474,7 @@ const processFiles = (files: File[]) => {
         const errorMessage = error.response?.data?.message || error.message || 'Error al enviar el reporte';
         throw new Error(errorMessage);
       }
-      
+
       setFormData({
         email: '',
         telefono: '',
@@ -444,59 +495,64 @@ const processFiles = (files: File[]) => {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [formData, uploadedFiles, aclaracionRespuestas, validateForm]); // Dependencias al useCallback
 
   const showOtroInput = formData.departamento.includes('Otro');
 
-  // Framer Motion Variants corregidos para los errores de tipado
-  // Se ha añadido `as const` a las strings de `ease` para que TypeScript las infiera como literales.
+  // Framer Motion Variants corregidos
   const fadeInGrowVariants = {
     hidden: { opacity: 0, scale: 0.95 },
-    visible: { 
-      opacity: 1, 
-      scale: 1, 
+    visible: {
+      opacity: 1,
+      scale: 1,
       transition: {
-        type: "spring" as const, 
+        type: "spring" as const,
         stiffness: 70,
         damping: 10,
         when: "beforeChildren" as const,
-        staggerChildren: 0.07 
+        staggerChildren: 0.07
       }
     }
   };
 
   const sectionVariants = {
     hidden: { opacity: 0, y: 30 },
-    visible: { 
-      opacity: 1, 
-      y: 0, 
-      transition: { 
-        duration: 0.6, 
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.6,
         ease: "easeOut" as const, // Corrected: use `as const` for string literal
         when: "beforeChildren" as const,
         staggerChildren: 0.05
-      } 
+      }
     }
   };
 
   const itemChildVariants = {
     hidden: { opacity: 0, y: 15 },
-    visible: { 
-      opacity: 1, 
-      y: 0, 
-      transition: { 
-        duration: 0.5, 
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.5,
         ease: "easeOut" as const // Corrected: use `as const`
-      } 
+      }
     }
   };
+
+    // Código para generar el SVG de la flecha personalizada para los select
+    const generateSvgArrow = useCallback((color: string) => `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='${color}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-chevron-down'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E`, []);
+    const defaultArrowColor = useMemo(() => encodeURIComponent('#6B7280'), []); // Tailwind's gray-500, hex code URL-encoded
+    const focusArrowColor = useMemo(() => encodeURIComponent('#3B82F6'), []); // Tailwind's blue-500 for focus effect
+
 
   return (
     <motion.div
       initial="hidden"
       animate="visible"
       variants={fadeInGrowVariants}
-      className="bg-gradient-to-br from-blue-100 via-indigo-100 to-purple-100 min-h-screen grid place-items-center py-16 px-4 sm:px-6 lg:px-8 font-inter antialiased relative overflow-hidden"
+      className="bg-gradient-to-br from-sky-50 via-blue-50 to-indigo-100 min-h-screen grid place-items-center py-16 px-4 sm:px-6 lg:px-8 font-inter antialiased relative overflow-hidden"
     >
       {/* Background blobs for an ethereal effect */}
       <motion.div
@@ -517,21 +573,61 @@ const processFiles = (files: File[]) => {
         transition={{ duration: 32, repeat: Infinity, ease: "linear" as const, delay: 16 }}
         className="absolute top-1/2 left-1/2 w-80 h-80 rounded-full bg-green-300 opacity-20 filter blur-3xl transform -translate-x-1/2 -translate-y-1/2 z-0"
       />
-      
+
       {/* Pattern Overlay */}
       <div className="absolute inset-0 z-0 opacity-10" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 12 12' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6 12L0 6V0l6 6v6zM12 6L6 0h6v6z' fill='%239CA3AF' fill-opacity='0.1'/%3E%3C/svg%3E")` }}></div>
+      
+      {/* Partículas flotantes */}
+      {[...Array(20)].map((_, i) => (
+        <motion.div
+          key={i}
+          className="absolute rounded-full bg-white z-0"
+          style={{
+            width: `${Math.random() * 10 + 2}px`,
+            height: `${Math.random() * 10 + 2}px`,
+            left: `${Math.random() * 100}%`,
+            top: `${Math.random() * 100}%`,
+          }}
+          animate={{
+            y: [0, -Math.random() * 100 - 50],
+            opacity: [0, Math.random() * 0.5 + 0.1, 0],
+          }}
+          transition={{
+            duration: Math.random() * 10 + 10,
+            repeat: Infinity,
+            delay: Math.random() * 5,
+            ease: "easeInOut"
+          }}
+        />
+      ))}
 
 
       {/* Form Card */}
-      <motion.div 
-        className="w-full max-w-4xl bg-white bg-opacity-98 backdrop-blur-xl p-8 sm:p-12 rounded-4xl border border-gray-100 shadow-4xl transform transition-all duration-300 relative overflow-hidden group hover:shadow-2xl hover:border-blue-200"
+      <motion.div
+        className="w-full max-w-4xl bg-white/95 backdrop-blur-xl p-8 sm:p-12 rounded-4xl border border-gray-100 shadow-4xl transform transition-all duration-300 relative overflow-hidden group hover:shadow-2xl hover:border-blue-200"
       >
         {/* Subtle decorative corners for hover effect */}
         <span className="absolute top-0 left-0 w-32 h-32 bg-gradient-to-br from-blue-300 to-indigo-300 rounded-br-full opacity-30 transform scale-0 group-hover:scale-100 transition-transform duration-500 ease-out z-0"></span>
         <span className="absolute bottom-0 right-0 w-32 h-32 bg-gradient-to-tl from-purple-300 to-pink-300 rounded-tl-full opacity-30 transform scale-0 group-hover:scale-100 transition-transform duration-500 ease-out delay-100 z-0"></span>
+        
+        {/* Línea decorativa animada */}
+        <motion.div 
+          className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 z-10"
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: 1 }}
+          transition={{ duration: 1.5, ease: "easeOut" }}
+        />
 
         {/* Header Section (consistent with Home & Login) */}
         <div className="bg-gradient-to-br from-blue-700 via-indigo-800 to-purple-900 text-white p-6 sm:p-8 rounded-4xl mb-12 shadow-xl shadow-indigo-900/40 relative overflow-hidden border border-white/20">
+          {/* Efecto de brillo animado en el fondo */}
+          <motion.div 
+            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+            initial={{ x: '-100%' }}
+            animate={{ x: '100%' }}
+            transition={{ duration: 3, repeat: Infinity, ease: "linear", repeatDelay: 2 }}
+          />
+          
           <div className="text-center relative z-10">
             <motion.div
               initial={{ scale: 0 }}
@@ -539,11 +635,17 @@ const processFiles = (files: File[]) => {
               transition={{ type: "spring" as const, stiffness: 260, damping: 20, delay: 0.2 }}
               className="flex justify-center mb-6"
             >
-              <div className="h-24 w-24 sm:h-28 sm:w-28 bg-white rounded-full p-2 shadow-2xl border-4 border-yellow-300 flex items-center justify-center overflow-hidden">
-                <img 
+              <div className="h-24 w-24 sm:h-28 sm:w-28 bg-white rounded-full p-2 shadow-2xl border-4 border-yellow-300 flex items-center justify-center overflow-hidden relative">
+                {/* Efecto de pulso en el logo */}
+                <motion.div 
+                  className="absolute inset-0 rounded-full border-4 border-yellow-300"
+                  animate={{ scale: [1, 1.1, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                />
+                <img
                   src="/Montemorelos.jpg"
                   alt="Logo Montemorelos"
-                  className="h-full w-full object-contain rounded-full transform hover:rotate-6 hover:scale-110 transition-transform duration-300"
+                  className="h-full w-full object-contain rounded-full transform hover:rotate-6 hover:scale-110 transition-transform duration-300 relative z-10"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
                     target.onerror = null;
@@ -585,6 +687,21 @@ const processFiles = (files: File[]) => {
 
         {/* Form sections */}
         <form onSubmit={handleSubmit} className="space-y-12 relative z-10">
+          {/* Indicador de progreso */}
+          <div className="mb-8">
+            <div className="flex justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">Progreso del formulario</span>
+              <span className="text-sm font-medium text-blue-600">{progress}% completado</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <motion.div 
+                className="bg-gradient-to-r from-blue-500 to-purple-600 h-2.5 rounded-full" 
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+              />
+            </div>
+          </div>
           {/* Seccion: Contacto */}
           <motion.div variants={sectionVariants}>
             <h3 className="text-xl sm:text-2xl font-bold text-gray-800 border-b pb-4 mb-8 flex items-center gap-3">
@@ -594,11 +711,12 @@ const processFiles = (files: File[]) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Campo de Email */}
               <motion.div variants={itemChildVariants}>
-                <label className="block text-sm font-semibold text-gray-700 mb-2.5 flex items-center">
+                <label htmlFor="email-input" className="block text-sm font-semibold text-gray-700 mb-2.5 flex items-center">
                   <Mail className="h-5 w-5 mr-2 text-blue-600" /> CORREO ELECTRÓNICO <span className="text-red-500 ml-1 text-base">*</span>
                 </label>
                 <div className="relative group">
                   <input
+                    id="email-input"
                     type="email"
                     name="email"
                     value={formData.email}
@@ -628,11 +746,12 @@ const processFiles = (files: File[]) => {
 
               {/* Campo de Teléfono */}
               <motion.div variants={itemChildVariants}>
-                <label className="block text-sm font-semibold text-gray-700 mb-2.5 flex items-center">
+                <label htmlFor="telefono-input" className="block text-sm font-semibold text-gray-700 mb-2.5 flex items-center">
                   <Phone className="h-5 w-5 mr-2 text-green-600" /> TELÉFONO <span className="text-red-500 ml-1 text-base">*</span>
                 </label>
                 <div className="relative group">
                   <input
+                    id="telefono-input"
                     type="tel"
                     name="telefono"
                     value={formData.telefono}
@@ -661,14 +780,15 @@ const processFiles = (files: File[]) => {
                 </AnimatePresence>
               </motion.div>
             </div>
-            
+
             {/* Campo Quién Reporta */}
-            <motion.div variants={itemChildVariants}>
-              <label className="block text-sm font-semibold text-gray-700 mb-2.5 flex items-center">
+            <motion.div variants={itemChildVariants} className="mt-8">
+              <label htmlFor="quienReporta-input" className="block text-sm font-semibold text-gray-700 mb-2.5 flex items-center">
                 <User className="h-5 w-5 mr-2 text-purple-600" /> ¿QUIÉN REPORTA? <span className="text-red-500 ml-1 text-base">*</span>
               </label>
               <div className="relative group">
                 <input
+                  id="quienReporta-input"
                   type="text"
                   name="quienReporta"
                   value={formData.quienReporta}
@@ -696,7 +816,7 @@ const processFiles = (files: File[]) => {
               </AnimatePresence>
             </motion.div>
           </motion.div>
-          
+
           {/* Sección: Problema */}
           <motion.div variants={sectionVariants}>
             <h3 className="text-xl sm:text-2xl font-bold text-gray-800 border-b pb-4 mb-8 flex items-center gap-3">
@@ -710,7 +830,7 @@ const processFiles = (files: File[]) => {
                 <Building className="h-5 w-5 mr-2 text-indigo-600" /> DEPARTAMENTO(S) AFECTADO(S) <span className="text-red-500 ml-1 text-base">*</span>
               </label>
               <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 p-5 border-2 rounded-xl bg-indigo-50/50 shadow-inner max-h-80 overflow-y-auto custom-scrollbar transition-all duration-300 ${
-                errors.departamento ? 'border-red-500 ring-1 ring-red-500' : 'border-indigo-200'
+                errors.departamento ? 'border-red-500 ring-1 ring-red-500 animate-shake' : 'border-indigo-200'
               }`} role="group" aria-labelledby="department-label">
                 {departamentosList.map((dept) => (
                   <label key={dept} className="relative flex items-center space-x-3 bg-white/70 hover:bg-white p-3.5 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer has-[:checked]:bg-blue-100 has-[:checked]:border-blue-500 has-[:checked]:ring-1 has-[:checked]:ring-blue-500 border border-transparent">
@@ -732,7 +852,7 @@ const processFiles = (files: File[]) => {
                   </label>
                 ))}
               </div>
-              
+
               <AnimatePresence>
                 {showOtroInput && (
                   <motion.div
@@ -740,14 +860,15 @@ const processFiles = (files: File[]) => {
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
                     transition={{ duration: 0.4, ease: "easeOut" as const }}
-                    className="mt-6 relative group"
+                    className="mt-6 relative"
                   >
-                    <label className="block text-sm font-semibold text-gray-700 mb-2.5 flex items-center">
+                    <label htmlFor="otroDepartamento-input" className="block text-sm font-semibold text-gray-700 mb-2.5 flex items-center">
                       <MapPin className="h-5 w-5 mr-2 text-yellow-600 inline-block" />
                       Especifica el "Otro" Departamento: <span className="text-red-500 ml-1 text-base">*</span>
                     </label>
-                    <div className="relative">
+                    <div className="relative group">
                       <input
+                        id="otroDepartamento-input"
                         type="text"
                         name="otroDepartamentoEspecifico"
                         value={formData.otroDepartamentoEspecifico || ''}
@@ -774,7 +895,7 @@ const processFiles = (files: File[]) => {
                   </motion.div>
                 )}
               </AnimatePresence>
-              
+
               <AnimatePresence>
                 {errors.departamento && (
                   <motion.p
@@ -790,19 +911,27 @@ const processFiles = (files: File[]) => {
             </motion.div>
 
             {/* Tipo de problema y aclaraciones */}
-            <motion.div variants={itemChildVariants}>
-              <label className="block text-sm font-semibold text-gray-700 mb-2.5 flex items-center">
+            <motion.div variants={itemChildVariants} className="mt-8">
+              <label htmlFor="tipoProblema-select" className="block text-sm font-semibold text-gray-700 mb-2.5 flex items-center">
                 <FileText className="h-5 w-5 mr-2 text-orange-600" /> TIPO DE PROBLEMA <span className="text-red-500 ml-1 text-base">*</span>
               </label>
               <div className="relative group">
                 <select
+                  id="tipoProblema-select"
                   name="tipoProblema"
                   value={formData.tipoProblema}
                   onChange={handleInputChange}
-                  className={`w-full pl-12 pr-4 py-3.5 border-2 rounded-xl focus:ring-4 focus:ring-orange-500 focus:ring-offset-2 focus:border-orange-500 transition-all duration-300 hover:border-orange-400 bg-gray-50 text-gray-900 appearance-none font-medium cursor-pointer ${
+                  className={`w-full pl-12 pr-4 py-3.5 border-2 rounded-xl focus:ring-4 focus:ring-orange-500 focus:ring-offset-2 focus:border-orange-500 transition-all duration-300 hover:border-orange-400 bg-gray-50 text-gray-900 appearance-none font-medium cursor-pointer
+                  bg-no-repeat bg-[right_0.75rem_center] bg-[length:1.2rem]
+                  group-hover:bg-[length:1.25rem_1.25rem] group-hover:bg-[right_0.7rem_center] group-focus-within:bg-[length:1.25rem_1.25rem] group-focus-within:bg-[right_0.7rem_center] ${
                     errors.tipoProblema ? 'border-red-500 animate-shake' : 'border-gray-300'
                   }`}
                   aria-required="true"
+                  style={{
+                    backgroundImage: `url("${generateSvgArrow(defaultArrowColor)}")`,
+                  }}
+                  onFocus={(e) => (e.target.style.backgroundImage = `url("${generateSvgArrow(focusArrowColor)}")`)}
+                  onBlur={(e) => (e.target.style.backgroundImage = `url("${generateSvgArrow(defaultArrowColor)}")`)}
                 >
                   <option value="" disabled>-- Selecciona el tipo de problema --</option>
                   {tiposProblema.map((tipo) => (
@@ -810,9 +939,6 @@ const processFiles = (files: File[]) => {
                   ))}
                 </select>
                 <List className={`absolute inset-y-0 left-3 flex items-center text-orange-400 pointer-events-none transition-colors group-focus-within:text-orange-600 ${errors.tipoProblema ? 'text-red-500' : ''}`} />
-                <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-500">
-                  <ChevronDown className="h-5 w-5" />
-                </div>
               </div>
               <AnimatePresence>
                 {errors.tipoProblema && (
@@ -831,11 +957,11 @@ const processFiles = (files: File[]) => {
                 {formData.tipoProblema && aclaracionPreguntas[formData.tipoProblema] && aclaracionPreguntas[formData.tipoProblema].length > 0 && (
                   <motion.div
                     key={formData.tipoProblema}
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
+                    initial={{ opacity: 0, height: 0, scaleY: 0.8 }}
+                    animate={{ opacity: 1, height: 'auto', scaleY: 1 }}
+                    exit={{ opacity: 0, height: 0, scaleY: 0.8 }}
                     transition={{ duration: 0.4, ease: "easeOut" as const }}
-                    className="mt-8 bg-blue-50/70 border-l-4 border-blue-400 p-6 rounded-xl shadow-lg"
+                    className="mt-8 bg-blue-50/70 border-l-4 border-blue-400 p-6 rounded-xl shadow-lg origin-top"
                   >
                     <p className="font-semibold text-blue-800 mb-5 flex items-center gap-3">
                       <Sparkles className="h-6 w-6 text-blue-600 fill-blue-600/20" />
@@ -844,13 +970,14 @@ const processFiles = (files: File[]) => {
                     <ul className="list-none space-y-5">
                       {aclaracionPreguntas[formData.tipoProblema].map((pregunta, idx) => (
                         <li key={idx}>
-                          <label className="text-gray-900 text-base font-semibold block mb-2">
+                          <label htmlFor={`aclaracion-${idx}`} className="text-gray-900 text-base font-semibold block mb-2">
                             <span className="text-blue-600 text-lg mr-2">•</span> {pregunta}
                           </label>
                           <input
+                            id={`aclaracion-${idx}`}
                             type="text"
                             className={`w-full px-4 py-3 border-2 rounded-lg focus:ring-3 focus:ring-blue-400 focus:border-blue-400 transition text-gray-900 bg-white/80 shadow-sm ${
-                              errors.aclaracionRespuestas && (!aclaracionRespuestas[idx] || aclaracionRespuestas[idx].trim() === '') ? 'border-red-500' : 'border-gray-300'
+                              errors.aclaracionRespuestas && (!aclaracionRespuestas[idx] || aclaracionRespuestas[idx].trim() === '') ? 'border-red-500 animate-shake' : 'border-gray-300'
                             }`}
                             placeholder="Tu respuesta detallada..."
                             value={aclaracionRespuestas[idx] || ''}
@@ -903,11 +1030,14 @@ const processFiles = (files: File[]) => {
                       aria-required="true"
                       aria-label={`Prioridad ${prioridad.label}`}
                     />
-                    <div className={`p-4 sm:p-5 rounded-xl border-2 transition-all duration-300 transform group-hover:scale-105 group-hover:shadow-lg text-center ${
-                      formData.prioridad === prioridad.value
-                        ? `bg-gradient-to-r ${prioridad.color} text-white border-transparent shadow-xl ring-2 ring-white ring-offset-2 ring-offset-${prioridad.value === 'Baja' ? 'emerald' : prioridad.value === 'Media' ? 'amber' : prioridad.value === 'Alta' ? 'orange' : 'red'}-600`
-                        : `${errors.prioridad ? 'border-red-500' : 'border-gray-300'} bg-white text-gray-800 hover:border-gray-400 group-hover:bg-gradient-to-r ${prioridad.color} hover:text-white`
-                    }`}>
+                    <div className={`p-4 sm:p-5 rounded-xl border-2 transition-all duration-300 transform group-hover:scale-105 group-hover:shadow-lg text-center
+                      ${prioridad.hoverBg} group-hover:text-white
+                      ${
+                        formData.prioridad === prioridad.value
+                          ? `bg-gradient-to-r ${prioridad.color} text-white border-transparent shadow-xl ring-2 ring-white ring-offset-2 ring-offset-${prioridad.ringColor}`
+                          : `${errors.prioridad ? 'border-red-500' : 'border-gray-300'} bg-white text-gray-800 hover:border-gray-400`
+                      }
+                      `}>
                       <span className="font-extrabold text-lg sm:text-xl">{prioridad.label}</span>
                       {formData.prioridad === prioridad.value && (
                         <motion.span
@@ -938,12 +1068,13 @@ const processFiles = (files: File[]) => {
             </motion.div>
 
             {/* Descripción del Problema */}
-            <motion.div variants={itemChildVariants}>
-              <label className="block text-sm font-semibold text-gray-700 mb-2.5 flex items-center">
+            <motion.div variants={itemChildVariants} className="mt-8">
+              <label htmlFor="descripcion-textarea" className="block text-sm font-semibold text-gray-700 mb-2.5 flex items-center">
                 <FileText className="h-5 w-5 mr-2 text-blue-600" /> DESCRIPCIÓN DETALLADA DEL PROBLEMA <span className="text-red-500 ml-1 text-base">*</span>
               </label>
               <div className="relative group">
                   <textarea
+                  id="descripcion-textarea"
                   name="descripcion"
                   value={formData.descripcion}
                   onChange={handleInputChange}
@@ -981,7 +1112,7 @@ const processFiles = (files: File[]) => {
               <UploadCloud className="h-7 w-7 text-pink-600" />
               Adjuntar Archivos (Opcional)
             </h3>
-            
+
             <motion.div variants={itemChildVariants}>
               <label htmlFor="file-input" className="block text-sm font-semibold text-gray-700 mb-2.5 flex items-center cursor-pointer">
                 <FileInput className="h-5 w-5 mr-2 text-pink-600" /> IMÁGENES, VIDEOS O DOCUMENTOS (Arrastra y Suelta)
@@ -997,9 +1128,9 @@ const processFiles = (files: File[]) => {
                     : 'border-gray-300 hover:border-pink-400 hover:bg-pink-50'
                 }`}
               >
-                <input 
-                  type="file" 
-                  multiple 
+                <input
+                  type="file"
+                  multiple
                   accept="image/*,video/mp4,video/webm,application/pdf"
                   onChange={handleFileInput}
                   className="hidden"
@@ -1022,7 +1153,7 @@ const processFiles = (files: File[]) => {
                 </div>
               </div>
             </motion.div>
-            
+
             <AnimatePresence>
               {uploadedFiles.length > 0 && (
                 <motion.div
@@ -1069,13 +1200,13 @@ const processFiles = (files: File[]) => {
               )}
             </AnimatePresence>
           </motion.div>
-          
+
           {/* Botón de Enviar Reporte */}
-          <motion.div variants={itemChildVariants}>
+          <motion.div variants={itemChildVariants} className="pt-6">
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`w-full relative overflow-hidden flex items-center justify-center space-x-3 px-8 py-4 rounded-2xl font-bold text-2xl transition-all duration-300 transform focus:outline-none focus:ring-4 focus:ring-purple-400 focus:ring-opacity-70 group
+              className={`w-full relative overflow-hidden flex items-center justify-center space-x-3 px-8 py-5 rounded-2xl font-bold text-2xl transition-all duration-300 transform focus:outline-none focus:ring-4 focus:ring-purple-400 focus:ring-opacity-70 group
                 ${isSubmitting
                   ? 'bg-gray-400 cursor-not-allowed opacity-70'
                   : 'bg-gradient-to-r from-blue-600 via-purple-600 to-green-600 text-white shadow-xl hover:shadow-2xl hover:-translate-y-1 hover:brightness-110 motion-safe:group-hover:animate-gradient-pulse'
@@ -1083,6 +1214,14 @@ const processFiles = (files: File[]) => {
               aria-live="polite"
               aria-busy={isSubmitting}
             >
+              {/* Efecto de onda en el botón */}
+              <motion.span 
+                className="absolute inset-0 bg-gradient-to-r from-blue-400/30 to-purple-400/30"
+                initial={{ x: '-100%' }}
+                animate={{ x: '100%' }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+              />
+              
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-8 w-8 animate-spin text-white relative z-10" />
@@ -1095,6 +1234,11 @@ const processFiles = (files: File[]) => {
                 </>
               )}
             </button>
+            
+            {/* Texto de ayuda */}
+            <p className="text-center text-gray-600 mt-4 text-sm">
+              Al enviar este reporte, aceptas nuestros términos y condiciones de servicio.
+            </p>
           </motion.div>
         </form>
       </motion.div>

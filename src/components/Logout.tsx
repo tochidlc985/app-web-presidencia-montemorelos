@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LogOut, Shield, Home, User, AlertCircle, RefreshCcw, Info, CheckCircle } from 'lucide-react'; // Iconos de Lucide
+import { LogOut, Shield, Home, User, AlertCircle, RefreshCcw, Info, CheckCircle, UserPlus } from 'lucide-react'; // Iconos de Lucide
 import toast from 'react-hot-toast'; // Importar react-hot-toast
 
 // URL de tu imagen de fondo principal (ajústala si es necesario)
@@ -62,7 +62,7 @@ const Logout: React.FC = () => {
 
     // 4. Simular progreso y redirigir
     let currentProgress = 0;
-    const increment = 100 / (2500 / 50); // Alcanzar 100% en 2.5s con intervalos de 50ms
+    const increment = 100 / (6000 / 50); // Alcanzar 100% en 6s con intervalos de 50ms
     const interval = setInterval(() => {
       currentProgress += increment;
       setProgress(Math.min(currentProgress, 100)); // No exceder 100
@@ -73,7 +73,7 @@ const Logout: React.FC = () => {
 
     const timer = setTimeout(() => {
       navigate('/login', { replace: true });
-    }, 2500); // Redirige después de 2.5 segundos
+    }, 6000); // Redirige después de 6 segundos
 
     // Limpieza al desmontar el componente
     return () => {
@@ -89,6 +89,10 @@ const Logout: React.FC = () => {
 
   const handleGoToHome = useCallback(() => {
     navigate('/home', { replace: true }); // Puede que necesite iniciar sesión de nuevo si /home está protegido
+  }, [navigate]);
+
+  const handleGoToRegister = useCallback(() => {
+    navigate('/register', { replace: true });
   }, [navigate]);
 
   return (
@@ -170,11 +174,11 @@ const Logout: React.FC = () => {
         </motion.div>
         
         {/* Título de despedida */}
-        <h2 className="text-4xl sm:text-5xl font-extrabold mb-3 text-blue-900 drop-shadow-lg leading-tight">¡Hasta pronto!</h2>
+        <h2 className="text-4xl sm:text-5xl font-extrabold mb-3 text-blue-900 drop-shadow-lg leading-tight">¡Hasta pronto, {lastUserName || 'amigo'}!</h2>
         
         {/* Mensaje de sesión cerrada */}
         <p className="mb-4 text-blue-700 text-lg font-medium leading-relaxed">
-          Tu sesión ha sido cerrada correctamente. <br />Esperamos verte de regreso.
+          Tu sesión como {lastUserRole || 'usuario'} ha sido cerrada correctamente. <br />Esperamos verte de regreso muy pronto en el sistema de la Presidencia Municipal de Montemorelos.
         </p>
 
         {/* CAMBIO: Información del usuario si está disponible */}
@@ -241,13 +245,13 @@ const Logout: React.FC = () => {
           </motion.button>
           
           <motion.button
-            whileHover={{ scale: 1.05, boxShadow: '0 8px 20px rgba(16,185,129,0.3)' }}
+            whileHover={{ scale: 1.05, boxShadow: '0 8px 20px rgba(124, 58, 237, 0.3)' }}
             whileTap={{ scale: 0.95 }}
-            onClick={handleGoToHome}
-            className="flex items-center justify-center gap-3 px-8 py-3 bg-green-500 text-white rounded-xl shadow-lg font-bold text-lg hover:bg-green-600 transition-all duration-200"
+            onClick={handleGoToRegister}
+            className="flex items-center justify-center gap-3 px-8 py-3 bg-purple-600 text-white rounded-xl shadow-lg font-bold text-lg hover:bg-purple-700 transition-all duration-200"
           >
-            <Home className="w-5 h-5" /> {/* Ícono de Home */}
-            Volver a la Home
+            <UserPlus className="w-5 h-5" /> {/* Ícono de UserPlus */}
+            Crear Nueva Cuenta
           </motion.button>
         </motion.div>
       </motion.div>

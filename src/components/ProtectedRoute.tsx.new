@@ -9,8 +9,6 @@ interface ProtectedRouteProps {
   allowedRoles?: string[]; // NUEVO: roles permitidos a nivel de ruta
 }
 
-const defaultAllowedRoles = ['usuario', 'administrador', 'jefe', 'tecnico'];
-
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
   const { usuario, isLoggedIn, logout } = useAuth(); // Usamos useAuth
   const location = useLocation();
@@ -38,35 +36,37 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
         return;
       }
 
-      // Verifica el rol solo si hay un usuario logueado en el contexto
-      let currentUserRoles: string[] = [];
-      
+      // Obtener el rol principal del usuario
+      let userRole = 'usuario';
+
       if (usuario?.roles) {
-        if (Array.isArray(usuario.roles)) {
-          currentUserRoles = usuario.roles.map(role => role.toLowerCase().trim());
+        if (Array.isArray(usuario.roles) && usuario.roles.length > 0) {
+          userRole = usuario.roles[0];
         } else if (typeof usuario.roles === 'string') {
-          currentUserRoles = usuario.roles.split(',').map(r => r.trim().toLowerCase());
+          userRole = usuario.roles.split(',')[0].trim();
         }
       } else if (usuario?.rol) {
-        currentUserRoles = [usuario.rol.toLowerCase().trim()];
+        userRole = usuario.rol;
       }
-      
-      // Manejar casos especiales: 'jefe_departamento' y 'jefe' deben ser tratados como equivalentes
-      const normalizedRoles = currentUserRoles.map(role => {
-        if (role === 'jefe_departamento') return 'jefe';
-        return role;
-      });
 
-      // Usar roles permitidos a nivel de ruta si fueron provistos; si no, usar los predeterminados
-      const routeAllowedRoles = (allowedRoles && allowedRoles.length > 0) ? allowedRoles : defaultAllowedRoles;
-      
-      const hasValidRole = routeAllowedRoles.some(allowedRole => {
-        // Convertir el rol permitido a minúsculas para comparación
-        const normalizedAllowedRole = allowedRole.toLowerCase();
-        return normalizedRoles.includes(normalizedAllowedRole);
-      });
+      // Normalizar el rol
+      const normalizedRole = normalizeRole(userRole);
 
-      if (!hasValidRole) {
+      // Verificar si el rol tiene permiso para acceder a la ruta actual
+      const hasRoutePermission = hasPermission(normalizedRole, location.pathname);
+
+      // Si se especificaron roles permitidos a nivel de ruta, verificar también
+      let hasRolePermission = true;
+      if (allowedRoles && allowedRoles.length > 0) {
+        hasRolePermission = allowedRoles.some(role => {
+          const normalizedAllowedRole = normalizeRole(role);
+          return normalizedRole === normalizedAllowedRole;
+        });
+      }
+
+      const isAuthorized = hasRoutePermission && hasRolePermission;
+
+      if (!isAuthorized) {
         toast.error('Su rol no tiene permisos para acceder a esta página.');
         // No hacemos logout inmediatamente para evitar problemas durante la edición
         // Solo marcamos como no autorizado

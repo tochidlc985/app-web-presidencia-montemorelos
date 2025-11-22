@@ -12,6 +12,9 @@ import { db } from './database.js';
 // Importar módulos necesarios para Vercel
 import { createServer } from 'http';
 
+// Importar el manejador de errores
+import { errorHandler, notFoundHandler, asyncHandler } from './errorHandler.js';
+
 // Cargar variables de entorno
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,7 +31,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const app = express();
-const PORT = 4000; // Forzar el uso del puerto 4000
+const PORT = process.env.PORT || 5000; // Usar puerto 5000 o el puerto definido en el entorno
 
 // Middleware globales
 app.use(cors({
@@ -38,9 +41,9 @@ app.use(cors({
     
     // Permitir el origen de desarrollo
     const allowedOrigins = [
-      'http://localhost:5173',
+      'http://localhost:6173',
       'http://localhost:5713',
-      'http://127.0.0.1:5173',
+      'http://127.0.0.1:6173',
       'http://127.0.0.1:5713'
     ];
     
@@ -109,7 +112,10 @@ const upload = multer({
 app.use('/uploads', express.static(uploadDir));
 
 // Middleware para verificar JWT y rol
-function requireRole(role) {
+function requireRole(roles) {
+  // Convertir a array si es un string
+  const allowedRoles = Array.isArray(roles) ? roles : [roles];
+  
   return (req, res, next) => {
     const auth = req.headers.authorization;
     if (!auth) return res.status(401).json({ message: 'No autorizado' });
@@ -118,7 +124,17 @@ function requireRole(role) {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       // Verificar si tiene el rol requerido (compatible con array o string)
       const userRoles = Array.isArray(decoded.roles) ? decoded.roles : [decoded.roles || decoded.rol];
-      if (!userRoles.includes(role)) return res.status(403).json({ message: 'Permiso denegado' });
+      
+      // Verificar si el usuario tiene al menos uno de los roles permitidos
+      const hasPermission = allowedRoles.some(role => userRoles.includes(role));
+      if (!hasPermission) {
+        return res.status(403).json({ 
+          message: 'Permiso denegado', 
+          requiredRoles: allowedRoles,
+          userRoles: userRoles 
+        });
+      }
+      
       req.user = decoded;
       next();
     } catch (err) {
@@ -175,40 +191,78 @@ app.get('/api/reportes', async (req, res) => {
 });
 
 // Actualizar estado o prioridad del reporte
-app.patch('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
+app.patch('/api/reportes/:id', requireRole(['administrador', 'jefe_departamento', 'tecnico']), async (req, res) => {
   try {
     const { id } = req.params;
     const update = req.body;
+    
+    // Validar que el ID sea válido
+    if (!id || id.length !== 24) {
+      return res.status(400).json({ message: 'ID de reporte inválido' });
+    }
+    
+    // Validar que haya datos para actualizar
+    if (!update || Object.keys(update).length === 0) {
+      return res.status(400).json({ message: 'No hay datos para actualizar' });
+    }
+    
+    console.log(`Actualizando reporte ${id} con datos:`, update);
+    
     const ok = await db.actualizarReporte(id, update);
     if (ok) {
-      res.json({ message: 'Reporte actualizado correctamente' });
+      // Obtener el reporte actualizado para devolverlo
+      const reporteActualizado = await db.obtenerReportePorId(id);
+      res.json({ 
+        message: 'Reporte actualizado correctamente',
+        reporte: reporteActualizado ? { ...reporteActualizado, _id: reporteActualizado._id.toString() } : null
+      });
     } else {
       res.status(404).json({ message: 'Reporte no encontrado' });
     }
   } catch (error) {
+    console.error('Error al actualizar reporte:', error);
     res.status(500).json({ message: 'Error al actualizar reporte', error: error.message });
   }
 });
 
-// Eliminar reporte (solo admin) y borrar imágenes asociadas
-app.delete('/api/reportes/:id', requireRole('administrador'), async (req, res) => {
+// Eliminar reporte y borrar imágenes asociadas
+app.delete('/api/reportes/:id', requireRole(['administrador', 'jefe_departamento', 'tecnico']), async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Validar que el ID sea válido
+    if (!id || id.length !== 24) {
+      return res.status(400).json({ message: 'ID de reporte inválido' });
+    }
+    
+    console.log(`Eliminando reporte ${id}`);
+    
     // Obtener reporte antes de eliminar
     const reporte = await db.obtenerReportePorId(id);
+    if (!reporte) {
+      return res.status(404).json({ message: 'Reporte no encontrado' });
+    }
+    
     const ok = await db.eliminarReporte(id);
 
     if (ok) {
       // Eliminar archivos asociados
       if (reporte && reporte.imagenes) {
         reporte.imagenes.forEach(img => {
-          const filePath = path.join(uploadDir, img);
-          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+          try {
+            const filePath = path.join(uploadDir, img);
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+              console.log(`Archivo eliminado: ${filePath}`);
+            }
+          } catch (fileError) {
+            console.warn(`No se pudo eliminar el archivo ${img}:`, fileError.message);
+          }
         });
       }
-      res.json({ message: 'Reporte eliminado correctamente' });
+      res.json({ message: 'Reporte eliminado correctamente', id });
     } else {
-      res.status(404).json({ message: 'Reporte no encontrado' });
+      res.status(500).json({ message: 'Error al eliminar el reporte de la base de datos' });
     }
   } catch (error) {
     console.error('Error en DELETE /api/reportes/:id:', error);
@@ -460,16 +514,8 @@ if (process.env.NODE_ENV === 'production') {
   }
 }
 
-// Manejo de errores 404
-app.use((req, res) => {
-  res.status(404).json({ message: 'Ruta no encontrada' });
-});
-
-// Manejo de errores generales
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Error en el servidor', error: err.message });
-});
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 // Crear servidor HTTP
 const server = createServer(app);

@@ -4,9 +4,13 @@
  * This script will check for common issues and provide fixes
  */
 
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
+import fs from 'fs';
+import path from 'path';
+import { execSync } from 'child_process';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const PROJECT_ROOT = __dirname;
 const UPLOADS_DIR = path.join(PROJECT_ROOT, 'uploads');
@@ -85,7 +89,7 @@ NODE_ENV=development
 PORT=4000
 
 # Frontend URL (for CORS)
-FRONTEND_URL=http://localhost:5173
+FRONTEND_URL=http://localhost:6173
 `;
     
     fs.writeFileSync(envPath, envTemplate);
@@ -117,8 +121,8 @@ function checkDependencies() {
 async function testMongoConnection() {
   console.log('\n🗄️  Testing MongoDB connection...');
   try {
-    const { MongoClient } = require('mongodb');
-    const dotenv = require('dotenv');
+    const { MongoClient } = await import('mongodb');
+    const dotenv = await import('dotenv');
     dotenv.config({ path: path.join(PROJECT_ROOT, '.env.local') });
     
     if (!process.env.MONGO_URI) {
@@ -182,7 +186,7 @@ REM Check if MongoDB is running
 tasklist /FI "IMAGENAME eq mongod.exe" 2>NUL | find /I "mongod.exe" >NUL
 if errorlevel 1 (
     echo ⚠️  MongoDB is not running. Please start MongoDB first.
-    echo    Try: mongod --dbpath C:\path\to\your\db
+    echo    Try: mongod --dbpath C:\\path\\to\\your\\db
 )
 
 REM Install dependencies if needed

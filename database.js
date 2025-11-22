@@ -60,16 +60,33 @@ class DatabaseService {
   }
 
   /**
-   * Conecta a la base de datos especificada
+   * Conecta a la base de datos especificada con reintentos
    * @param {string} dbName - Nombre de la base de datos a conectar
    * @returns {Db} Instancia de la base de datos conectada
    */
   async connectToDatabase(dbName) {
-    if (!this.client || !this.client.topology || !this.client.topology.isConnected()) {
-      this.client = new MongoClient(this.MONGO_URI);
-      await this.client.connect();
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 segundo entre reintentos
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        if (!this.client || !this.client.topology || !this.client.topology.isConnected()) {
+          this.client = new MongoClient(this.MONGO_URI);
+          await this.client.connect();
+          console.log(`✅ Conexión a MongoDB establecida correctamente (Intento ${attempt})`);
+        }
+        return this.client.db(dbName);
+      } catch (error) {
+        console.error(`❌ Error al conectar a MongoDB (Intento ${attempt}/${maxRetries}):`, error.message);
+        
+        if (attempt === maxRetries) {
+          throw new Error(`No se pudo conectar a MongoDB después de ${maxRetries} intentos. Verifique que MongoDB esté ejecutándose y que la URI sea correcta. Error: ${error.message}`);
+        }
+        
+        // Esperar antes del próximo intento
+        await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
+      }
     }
-    return this.client.db(dbName);
   }
 
   /**
@@ -147,15 +164,25 @@ class DatabaseService {
    * @returns {Object} Datos del usuario registrado sin la contraseña
    */
   async registrarUsuario({ nombre, email, password, rol }) {
-    await this.conectarInternos();
-    const existente = await this.usersInternosCollection.findOne({ email });
-    if (existente) throw new Error('El usuario ya existe');
+    try {
+      await this.conectarInternos();
+      const existente = await this.usersInternosCollection.findOne({ email });
+      if (existente) throw new Error(`El usuario con email ${email} ya existe en el sistema`);
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const result = await this.usersInternosCollection.insertOne({
-      nombre, email, password: hashedPassword, rol, fechaRegistro: new Date()
-    });
-    return { _id: result.insertedId.toString(), nombre, email, rol, fechaRegistro: new Date() };
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const result = await this.usersInternosCollection.insertOne({
+        nombre, email, password: hashedPassword, rol, fechaRegistro: new Date()
+      });
+      
+      if (!result.acknowledged) {
+        throw new Error('No se pudo registrar el usuario en la base de datos');
+      }
+      
+      return { _id: result.insertedId.toString(), nombre, email, rol, fechaRegistro: new Date() };
+    } catch (error) {
+      console.error('Error al registrar usuario:', error.message);
+      throw new Error(`Error al registrar usuario: ${error.message}`);
+    }
   }
 
   /**
@@ -164,59 +191,64 @@ class DatabaseService {
    * @returns {Object} Datos del usuario autenticado
    */
   async autenticarUsuario({ email, password }) {
-    await this.conectarInternos();
-    const usuario = await this.usersInternosCollection.findOne({ email });
-    if (!usuario) throw new Error('Usuario no encontrado');
+    try {
+      await this.conectarInternos();
+      const usuario = await this.usersInternosCollection.findOne({ email });
+      if (!usuario) throw new Error(`Usuario con email ${email} no encontrado en el sistema`);
 
-    const passwordValida = await bcrypt.compare(password, usuario.password);
-    if (!passwordValida) throw new Error('Contraseña incorrecta');
+      const passwordValida = await bcrypt.compare(password, usuario.password);
+      if (!passwordValida) throw new Error('La contraseña proporcionada es incorrecta');
 
-    const { password: _, ...usuarioSinPassword } = usuario;
+      const { password: _, ...usuarioSinPassword } = usuario;
 
-    // Guardar o actualizar el perfil en la colección correspondiente según el rol
-    if (usuario.rol) {
-      try {
-        const dbPerfil = await this.connectToDatabase(this.DB_NAME_PERFIL);
+      // Guardar o actualizar el perfil en la colección correspondiente según el rol
+      if (usuario.rol) {
+        try {
+          const dbPerfil = await this.connectToDatabase(this.DB_NAME_PERFIL);
 
-        let coleccionPerfil;
-        if (usuario.rol === 'administrador') {
-          coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_ADMINISTRADOR_PERFIL);
-        } else if (usuario.rol === 'jefe_departamento') {
-          coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_JEFE_DEPARTAMENTO_PERFIL);
-        } else if (usuario.rol === 'tecnico') {
-          coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_TECNICO_PERFIL);
-        } else {
-          coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_USUARIO_PERFIL);
-        }
+          let coleccionPerfil;
+          if (usuario.rol === 'administrador') {
+            coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_ADMINISTRADOR_PERFIL);
+          } else if (usuario.rol === 'jefe_departamento') {
+            coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_JEFE_DEPARTAMENTO_PERFIL);
+          } else if (usuario.rol === 'tecnico') {
+            coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_TECNICO_PERFIL);
+          } else {
+            coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_USUARIO_PERFIL);
+          }
 
-        // Verificar si ya existe un perfil para este usuario
-        const perfilExistente = await coleccionPerfil.findOne({ email });
+          // Verificar si ya existe un perfil para este usuario
+          const perfilExistente = await coleccionPerfil.findOne({ email });
 
-        if (!perfilExistente) {
-          // Si no existe, crear un nuevo perfil en la colección correspondiente
-          await coleccionPerfil.insertOne({
-            ...usuarioSinPassword,
-            fechaActualizacion: new Date()
-          });
-        } else {
-          // Si ya existe, actualizarlo
-          await coleccionPerfil.updateOne(
-            { email },
-            {
-              $set: {
-                ...usuarioSinPassword,
-                fechaActualizacion: new Date()
+          if (!perfilExistente) {
+            // Si no existe, crear un nuevo perfil en la colección correspondiente
+            await coleccionPerfil.insertOne({
+              ...usuarioSinPassword,
+              fechaActualizacion: new Date()
+            });
+          } else {
+            // Si ya existe, actualizarlo
+            await coleccionPerfil.updateOne(
+              { email },
+              {
+                $set: {
+                  ...usuarioSinPassword,
+                  fechaActualizacion: new Date()
+                }
               }
-            }
-          );
+            );
+          }
+        } catch (error) {
+          console.error('Error al guardar en colección de perfiles durante autenticación:', error);
+          // No lanzamos el error para no interrumpir el flujo principal
         }
-      } catch (error) {
-        console.error('Error al guardar en colección de perfiles durante autenticación:', error);
-        // No lanzamos el error para no interrumpir el flujo principal
       }
-    }
 
-    return { ...usuarioSinPassword, _id: usuarioSinPassword._id.toString() };
+      return { ...usuarioSinPassword, _id: usuarioSinPassword._id.toString() };
+    } catch (error) {
+      console.error('Error en autenticación de usuario:', error.message);
+      throw new Error(`Error al autenticar usuario: ${error.message}`);
+    }
   }
 
   /**
@@ -285,6 +317,10 @@ class DatabaseService {
    */
   async actualizarPerfilUsuario(email, updateData) {
     await this.conectarInternos();
+
+    // Guardar el rol antes de eliminarlo
+    const rol = updateData.rol || 'usuario';
+
     if (updateData.password) {
       updateData.password = await bcrypt.hash(updateData.password, 10);
     }
@@ -302,7 +338,6 @@ class DatabaseService {
 
       // Si no hay nombre en los datos a actualizar, usar el email como nombre
       const nombre = updateData.nombre || email.split('@')[0];
-      const rol = updateData.rol || 'usuario';
 
       // Crear un nuevo usuario
       const hashedPassword = await bcrypt.hash('temporal123', 10); // Contraseña temporal
@@ -315,17 +350,29 @@ class DatabaseService {
         ...updateData
       };
 
-      const insertResult = await this.usersInternosCollection.insertOne(nuevoUsuario);
-      if (insertResult.acknowledged) {
-        usuario = { ...nuevoUsuario, _id: insertResult.insertedId };
-        result = { modifiedCount: 1 }; // Simular una modificación exitosa
-      } else {
-        console.error(`No se pudo crear el usuario con email ${email}`);
+      try {
+        const insertResult = await this.usersInternosCollection.insertOne(nuevoUsuario);
+        if (insertResult.acknowledged) {
+          usuario = { ...nuevoUsuario, _id: insertResult.insertedId };
+          result = { modifiedCount: 1 }; // Simular una modificación exitosa
+          console.log(`Usuario creado exitosamente con email ${email}`);
+        } else {
+          console.error(`No se pudo crear el usuario con email ${email}`);
+          return false;
+        }
+      } catch (insertError) {
+        console.error(`Error al insertar nuevo usuario con email ${email}:`, insertError);
         return false;
       }
     } else {
       // Actualizar en la colección principal de usuarios
-      result = await this.usersInternosCollection.updateOne({ email }, { $set: updateData });
+      try {
+        result = await this.usersInternosCollection.updateOne({ email }, { $set: updateData });
+        console.log(`Usuario actualizado exitosamente con email ${email}`);
+      } catch (updateError) {
+        console.error(`Error al actualizar usuario con email ${email}:`, updateError);
+        return false;
+      }
     }
 
     // También actualizar en la colección de perfiles correspondiente

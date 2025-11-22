@@ -1,10 +1,21 @@
 import axios from 'axios';
-import { API_BASE_URL } from './services/apiConfig';
+import { API_BASE_URL, ADJUSTED_API_BASE_URL } from './services/apiConfig';
+
+// Determinar la URL base a usar según el entorno
+const getBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    // Si estamos en localhost, usar la URL ajustada
+    if (window.location.hostname.includes('localhost')) {
+      return ADJUSTED_API_BASE_URL;
+    }
+  }
+  return API_BASE_URL;
+};
 
 // Usar URL base para todas las solicitudes
 const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 30000, // Añadir timeout para evitar peticiones colgadas (aumentado a 30 segundos)
+  baseURL: getBaseUrl(),
+  timeout: 60000, // Aumentar timeout a 60 segundos para dar más tiempo a las solicitudes
   withCredentials: true, // Importante para CORS y cookies
   headers: {
     'Content-Type': 'application/json',
@@ -28,19 +39,32 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Redirigir al login si el token no es válido
+    // Manejar errores de autenticación (401 Unauthorized y 403 Forbidden)
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      console.error('Error de autenticación:', error.response?.status, error.response?.data);
+
+      // Redirigir al login si el token no es válido o no tiene permisos
       localStorage.removeItem('token');
       localStorage.removeItem('usuario');
-      window.location.href = '/login';
+
+      // Evitar redirección infinita si ya estamos en la página de login
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
     }
-    
+
     // Mejorar el manejo de errores de red
     if (error.code === 'ECONNABORTED' || error.message === 'Network Error') {
       console.error('Error de conexión:', error.message);
       error.message = 'Error de conexión. Por favor, verifica tu conexión a internet.';
     }
-    
+
+    // Proporcionar más información sobre errores 403
+    if (error.response?.status === 403) {
+      console.error('Error de permisos (403):', error.response?.data);
+      error.message = 'No tienes permisos para realizar esta acción.';
+    }
+
     return Promise.reject(error);
   }
 );

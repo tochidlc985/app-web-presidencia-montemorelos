@@ -15,6 +15,8 @@ export interface Usuario {
   fotoRotation?: number;
   fotoPositionX?: number;
   fotoPositionY?: number;
+  // Propiedad para indicar si es un nuevo perfil
+  esNuevoPerfil?: boolean;
   [key: string]: any;
 }
 
@@ -73,6 +75,10 @@ export const updateUserProfile = async (userData: Usuario): Promise<Usuario> => 
     delete payload.fotoPositionX;
     delete payload.fotoPositionY;
 
+    // Si es un nuevo perfil, asegurarse de que se envíe el rol
+    const esNuevoPerfil = payload.esNuevoPerfil || false;
+    delete payload.esNuevoPerfil;
+
     const url = getFullUrl(`${API_ENDPOINTS.PERFIL}/${userData.email}`);
     console.log('Intentando actualizar perfil en:', url);
     console.log('Datos a enviar:', JSON.stringify(payload, null, 2));
@@ -85,6 +91,41 @@ export const updateUserProfile = async (userData: Usuario): Promise<Usuario> => 
       },
       body: JSON.stringify(payload)
     });
+
+    // Si recibimos un 404, intentar crear un nuevo perfil
+    if (response.status === 404 && !esNuevoPerfil) {
+      console.log('Perfil no encontrado, intentando crear uno nuevo...');
+
+      // Asegurarse de que tenemos los campos necesarios para crear un usuario
+      const newPayload = {
+        ...payload,
+        nombre: payload.nombre || payload.email?.split('@')[0] || 'Usuario',
+        email: payload.email,
+        rol: payload.rol || 'usuario'
+      };
+
+      // Marcar que es un nuevo perfil para evitar bucles
+      newPayload.esNuevoPerfil = true;
+
+      const createResponse = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(newPayload)
+      });
+
+      if (!createResponse.ok) {
+        const errorText = await createResponse.text();
+        console.error('Error al crear nuevo perfil:', createResponse.status, errorText);
+        throw new Error(`Error al crear perfil: ${createResponse.status}. ${errorText}`);
+      }
+
+      const createData = await createResponse.json();
+      console.log('Nuevo perfil creado correctamente:', createData);
+      return createData.usuario || newPayload;
+    }
 
     if (!response.ok) {
       const errorText = await response.text();

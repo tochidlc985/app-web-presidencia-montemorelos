@@ -9,11 +9,11 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0', // Permite acceso desde dispositivos externos en la red
-    port: 5713,      // Especifica el puerto en el que se ejecutará el servidor localmente
-    strictPort: false, // Permite que Vite busque otro puerto si el especificado está ocupado
+    port: 6173,      // Especifica el puerto en el que se ejecutará el servidor localmente
+    strictPort: true, // Fuerza el uso del puerto 6173 sin buscar alternativas
     proxy: {
       '/api': {
-        target: 'http://localhost:4000',
+        target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path,
@@ -35,5 +35,9 @@ export default defineConfig({
     outDir: 'dist',
     assetsDir: 'assets',
     sourcemap: false,
+  },
+  // Configuración para Vercel
+  define: {
+    global: 'globalThis',
   },
 });

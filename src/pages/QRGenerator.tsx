@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react'; // Asegura la importación
 import { motion, AnimatePresence } from 'framer-motion';
 import QRCode from 'qrcode'; // Importa la librería de QR Code
 import toast from 'react-hot-toast';
-import { 
+import {
   QrCode, Download, Share2, Copy, ExternalLink, Zap, AlertCircle, Info, CheckCircle, Loader2,
   Sparkles, Sliders // Iconos de Lucide-React
 } from 'lucide-react';
@@ -19,19 +19,21 @@ const QRGenerator = () => {
     // Esto construirá la URL completa. En producción, usaremos la URL de Vercel directamente
     // para asegurar que funcione correctamente al escanear desde un teléfono.
     const isProduction = process.env.NODE_ENV === 'production';
-    
-    if (isProduction) {
-      // URL de producción en Vercel
-      return 'https://sistema-reportes-montemorelos.vercel.app' + FORM_PUBLIC_PATH;
+    const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
+
+    if (isProduction || isVercel) {
+      // URL de producción en Vercel - detectar automáticamente el dominio actual
+      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://sistema-reportes-montemorelos.vercel.app';
+      return currentOrigin + FORM_PUBLIC_PATH;
     } else {
       // En desarrollo, usar la URL local
-      return window.location.origin + FORM_PUBLIC_PATH;
+      return typeof window !== 'undefined' ? window.location.origin + FORM_PUBLIC_PATH : 'http://localhost:6173' + FORM_PUBLIC_PATH;
     }
   }, [FORM_PUBLIC_PATH]);
 
   // Ruta al logo pequeño para incrustar en el centro del QR (asegúrate de que esta imagen exista)
   // ¡ATENCIÓN! La ruta `/Montemorelos.jpg` asume que está en la carpeta `public` de tu proyecto.
-  const LOGO_QR_PATH = '/Montemorelos.jpg'; 
+  const LOGO_QR_PATH = '/Montemorelos.jpg';
 
   // Helper para mostrar un toast con estilos personalizados
   const showThemedToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -106,7 +108,7 @@ const QRGenerator = () => {
           const borderSize = 5;
           ctx.fillStyle = '#ffffff'; // Color del borde
           ctx.fillRect(logoX - borderSize, logoY - borderSize, logoSize + 2 * borderSize, logoSize + 2 * borderSize);
-          
+
           ctx.drawImage(img, logoX, logoY, logoSize, logoSize);
 
           // 4. Convertir el Canvas a Data URL (PNG)
@@ -202,40 +204,51 @@ const QRGenerator = () => {
 
 
   return (
-    // Fondo degradado más complejo y sutil, consistente con otras páginas
+    // Fondo degradado más vibrante y moderno con animaciones mejoradas
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-blue-50 to-purple-50 p-4 sm:p-6 lg:p-8 font-inter antialiased relative overflow-hidden">
-      {/* Fondos animados con colores armónicos y un toque de blur */}
-      <div className="absolute inset-0 mix-blend-multiply opacity-50 z-0">
-        <motion.div 
-            initial={{x: -100, y: -100, opacity: 0}} 
-            animate={{x: [ -100, 1000], y: [-100, 800], opacity: [0, 0.4, 0]}} 
-            transition={{duration: 30, repeat: Infinity, ease: "linear" as const }}
-            className="w-80 h-80 rounded-full bg-blue-300 absolute blur-2xl"
+      {/* Fondos animados con colores más vibrantes y animaciones más fluidas */}
+      <div className="absolute inset-0 mix-blend-multiply opacity-60 z-0">
+        <motion.div
+            initial={{x: -200, y: -200, scale: 0.5, opacity: 0}}
+            animate={{x: [-200, 1200], y: [-200, 1000], scale: [0.5, 1.3, 0.5], opacity: [0, 0.6, 0]}}
+            transition={{duration: 40, repeat: Infinity, ease: "linear" as const}}
+            className="w-96 h-96 rounded-full bg-gradient-to-r from-blue-400 to-indigo-500 absolute blur-3xl"
         ></motion.div>
-        <motion.div 
-            initial={{x: 800, y: 100, opacity: 0}} 
-            animate={{x: [ 800, -200], y: [100, 900], opacity: [0, 0.4, 0]}} 
-            transition={{duration: 35, repeat: Infinity, ease: "linear" as const }}
-            className="w-96 h-96 rounded-full bg-teal-300 absolute blur-2xl"
+        <motion.div
+            initial={{x: 900, y: 50, scale: 0.5, opacity: 0}}
+            animate={{x: [900, -300], y: [50, 1100], scale: [0.5, 1.2, 0.5], opacity: [0, 0.6, 0]}}
+            transition={{duration: 35, repeat: Infinity, ease: "linear" as const, delay: 5}}
+            className="w-[28rem] h-[28rem] rounded-full bg-gradient-to-r from-teal-400 to-cyan-500 absolute blur-3xl"
         ></motion.div>
-        <motion.div 
-            initial={{x: 400, y: 700, opacity: 0}} 
-            animate={{x: [ 400, 0], y: [700, -200], opacity: [0, 0.3, 0]}} 
-            transition={{duration: 40, repeat: Infinity, ease: "linear" as const }}
-            className="w-72 h-72 rounded-full bg-purple-300 absolute blur-2xl"
+        <motion.div
+            initial={{x: 300, y: 800, scale: 0.5, opacity: 0}}
+            animate={{x: [300, -100], y: [800, -300], scale: [0.5, 1.4, 0.5], opacity: [0, 0.5, 0]}}
+            transition={{duration: 45, repeat: Infinity, ease: "linear" as const, delay: 10}}
+            className="w-80 h-80 rounded-full bg-gradient-to-r from-purple-400 to-pink-500 absolute blur-3xl"
+        ></motion.div>
+        <motion.div
+            initial={{x: 600, y: -100, scale: 0.5, opacity: 0}}
+            animate={{x: [600, -400], y: [-100, 900], scale: [0.5, 1.1, 0.5], opacity: [0, 0.4, 0]}}
+            transition={{duration: 40, repeat: Infinity, ease: "linear" as const, delay: 15}}
+            className="w-72 h-72 rounded-full bg-gradient-to-r from-yellow-300 to-orange-400 absolute blur-3xl"
         ></motion.div>
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto py-10 space-y-12">
-        {/* Encabezado principal con estilo glassmorphism consistente */}
+        {/* Encabezado principal con estilo glassmorphism mejorado */}
         <motion.div
           initial={{ opacity: 0, y: -50 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" as const }}
-          className="text-center bg-white/80 backdrop-blur-xl rounded-[2.5rem] p-8 sm:p-10 shadow-3xl border border-gray-100 relative overflow-hidden"
+          className="text-center bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-8 sm:p-10 shadow-3xl border border-gray-100 relative overflow-hidden hover:shadow-4xl transition-all duration-300"
         >
-          {/* Capas sutiles para efecto de vidrio en hover */}
-          <span className="absolute inset-0 bg-gradient-to-tr from-blue-50 via-white to-purple-50 opacity-30 z-0 rounded-[2.5rem]"></span>
+          {/* Capas sutiles para efecto de vidrio con animación */}
+          <span className="absolute inset-0 bg-gradient-to-tr from-blue-50 via-white to-purple-50 opacity-40 z-0 rounded-[2.5rem]"></span>
+          <motion.div
+            className="absolute inset-0 bg-gradient-to-r from-blue-400/10 via-purple-400/10 to-pink-400/10 rounded-[2.5rem] opacity-0 z-0"
+            animate={{ opacity: [0, 0.3, 0] }}
+            transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" as const }}
+          ></motion.div>
 
           <motion.div
             initial={{ scale: 0.5, rotate: -30 }}
@@ -243,20 +256,28 @@ const QRGenerator = () => {
             transition={{ type: "spring" as const, stiffness: 200, damping: 20, delay: 0.3 }}
             className="flex justify-center mb-6 relative z-10"
           >
-            <img
-              src="/Montemorelos.jpg"
-              alt="Escudo de Montemorelos"
-              className="h-28 w-28 sm:h-32 sm:w-32 object-contain rounded-full shadow-2xl p-2
-              bg-gradient-to-tr from-teal-400 via-blue-400 to-indigo-500 transform hover:scale-110 transition-transform duration-300 ring-4 ring-blue-300 ring-opacity-70 border-4 border-white"
-            />
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full blur-md opacity-70 animate-pulse"></div>
+              <img
+                src="/Montemorelos.jpg"
+                alt="Escudo de Montemorelos"
+                className="h-32 w-32 sm:h-36 sm:w-36 object-contain rounded-full shadow-2xl p-2
+                bg-gradient-to-tr from-teal-400 via-blue-400 to-indigo-500 transform hover:scale-110 transition-transform duration-300 ring-4 ring-blue-300 ring-opacity-70 border-4 border-white relative z-10"
+              />
+            </div>
           </motion.div>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-teal-700 via-blue-700 to-indigo-800 mb-4 leading-tight drop-shadow-xl tracking-tight">
             Generador de Código QR
           </h1>
-          <p className="text-lg sm:text-xl text-gray-700 max-w-4xl mx-auto font-medium leading-relaxed drop-shadow-sm">
-            Crea códigos QR personalizados para un acceso instantáneo a la{' '}
-            <span className="font-semibold text-blue-700">aplicación web de la Presidencia Municipal de Montemorelos</span> desde tu dispositivo móvil.
-          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-2 mb-4">
+            <p className="text-lg sm:text-xl text-gray-700 max-w-4xl font-medium leading-relaxed drop-shadow-sm">
+              Crea códigos QR personalizados para un acceso instantáneo a la
+            </p>
+            <span className="text-lg sm:text-xl font-bold text-blue-700 bg-blue-100 rounded-full px-4 py-1 inline-block shadow-md transition-all hover:bg-blue-200 hover:shadow-lg">
+              aplicación web de la Presidencia Municipal de Montemorelos
+            </span>
+          </div>
+          <p className="text-base text-gray-600 max-w-2xl mx-auto">Escanea desde tu dispositivo móvil para acceder al formulario de reportes</p>
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: '120px' }}
@@ -274,41 +295,49 @@ const QRGenerator = () => {
             transition={{ duration: 0.7, delay: 0.5 }}
             className="bg-white/95 backdrop-blur-xl rounded-[2.5rem] shadow-3xl border border-gray-100 p-8 sm:p-10 flex flex-col items-center text-center relative group overflow-hidden transform hover:scale-[1.01] transition-all duration-300"
           >
-            {/* Fondo decorativo interno al hover */}
+            {/* Fondos decorativos internos al hover */}
             <span className="absolute top-0 left-0 w-32 h-32 rounded-full bg-blue-200 blur-xl opacity-0 transition-all duration-500 group-hover:opacity-30 group-hover:w-full group-hover:h-full z-0"></span>
+            <span className="absolute bottom-0 right-0 w-32 h-32 rounded-full bg-purple-200 blur-xl opacity-0 transition-all duration-500 group-hover:opacity-30 group-hover:w-full group-hover:h-full z-0"></span>
 
-            {/* Header del panel */}
-            <div className="bg-gradient-to-r from-teal-600 via-blue-600 to-indigo-700 text-white p-6 sm:p-8 rounded-2xl mb-8 shadow-xl shadow-indigo-900/50 w-full relative z-10">
-              <QrCode className="h-12 w-12 sm:h-16 sm:w-16 mb-3 mx-auto" strokeWidth={1.5} />
-              <h2 className="text-3xl sm:text-4xl font-bold mb-1 leading-tight">Crea Tu QR</h2>
-              <p className="text-base sm:text-lg text-teal-100 opacity-90">Acceso rápido, directo y universal al formulario</p>
+            {/* Header del panel mejorado */}
+            <div className="bg-gradient-to-r from-teal-600 via-blue-600 to-indigo-700 text-white p-6 sm:p-8 rounded-2xl mb-8 shadow-xl shadow-indigo-900/50 w-full relative z-10 overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 opacity-30"></div>
+              <div className="relative z-10 flex flex-col items-center">
+                <div className="p-3 rounded-full bg-white/20 backdrop-blur-sm mb-4">
+                  <QrCode className="h-14 w-14 sm:h-16 sm:w-16" strokeWidth={1.5} />
+                </div>
+                <h2 className="text-3xl sm:text-4xl font-bold mb-1 leading-tight">Crea Tu QR</h2>
+                <p className="text-base sm:text-lg text-teal-100 opacity-90">Acceso rápido, directo y universal al formulario</p>
+              </div>
             </div>
 
-            {/* Botón de Generar QR */}
+            {/* Botón de Generar QR mejorado */}
             <div className="flex flex-col items-center w-full mb-8 relative z-10">
               <motion.button
-                whileHover={{ scale: 1.05, boxShadow: "0 10px 40px rgba(0,0,0,0.3)" }}
+                whileHover={{ scale: 1.05, y: -5, boxShadow: "0 15px 40px rgba(0,0,0,0.3)" }}
                 whileTap={{ scale: 0.95 }}
                 onClick={handleGenerateQR}
                 disabled={isGenerating}
-                className={`${btnGradient1} px-10 py-4 sm:py-5 text-xl rounded-2xl disabled:opacity-60 disabled:cursor-not-allowed transform group-hover:scale-105`}
+                className={`${btnGradient1} px-10 py-5 sm:py-6 text-xl rounded-2xl disabled:opacity-60 disabled:cursor-not-allowed transform group-hover:scale-105 shadow-lg hover:shadow-xl`}
                 aria-label="Generar código QR"
               >
                 {isGenerating ? (
                   <>
-                    <Loader2 className="h-7 w-7 animate-spin" />
-                    Generando QR...
+                    <Loader2 className="h-8 w-8 animate-spin" />
+                    <span>Generando QR...</span>
                   </>
                 ) : (
                   <>
-                    <Zap className="h-7 w-7 transition-transform group-hover:rotate-6" />
-                    Generar QR de la App
+                    <Zap className="h-8 w-8 transition-transform group-hover:rotate-12" />
+                    <span>Generar QR de la App</span>
                   </>
                 )}
               </motion.button>
-              <p className="text-sm sm:text-base text-gray-600 mt-4 max-w-lg leading-relaxed">
-                Genera el Código QR más reciente. ¡Es la forma más rápida y oficial de acceder a la aplicación desde tu dispositivo!
-              </p>
+              <div className="mt-6 p-4 bg-blue-50 rounded-2xl border border-blue-200 max-w-lg">
+                <p className="text-sm sm:text-base text-gray-700 leading-relaxed">
+                  <span className="font-semibold text-blue-800">Importante:</span> Genera el Código QR más reciente. ¡Es la forma más rápida y oficial de acceder a la aplicación desde tu dispositivo!
+                </p>
+              </div>
             </div>
 
             {/* Mensaje de Error */}
@@ -347,7 +376,7 @@ const QRGenerator = () => {
                       // Previene arrastrar y abrir el PNG en el navegador
                       onDragStart={(e) => e.preventDefault()}
                       // Para navegadores que permitan click derecho rápido sobre imagen
-                      onContextMenu={(e) => e.preventDefault()} 
+                      onContextMenu={(e) => e.preventDefault()}
                     />
                   </motion.div>
                   {/* URL Real y Botones de Copiar/Abrir */}

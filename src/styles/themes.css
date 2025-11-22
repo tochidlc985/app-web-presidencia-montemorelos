@@ -1,0 +1,562 @@
+/* Temas y variables personalizadas para la aplicación */
+
+/* Estilos base para mejor responsividad */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px; /* Tamaño base */
+  -webkit-text-size-adjust: 100%; /* Prevenir ajuste de tamaño en iOS */
+}
+
+/* Variables por defecto (tema azul) */
+:root {
+  /* Forzar la recarga de estilos cuando se aplican clases temporales */
+  &.theme-updating,
+  &.font-updating,
+  &.border-updating,
+  &.density-updating,
+  &.contrast-updating,
+  &.animations-updating,
+  &.global-settings-updating {
+    transition: all 0.1s ease;
+  }
+  /* Colores del tema */
+  --primary-color: #3b82f6;
+  --primary-light: #60a5fa;
+  --primary-dark: #2563eb;
+  --secondary-color: #64748b;
+  --accent-color: #8b5cf6;
+  --background-color: #f8fafc;
+  --surface-color: #ffffff;
+  --text-color: #1e293b;
+  --text-secondary: #64748b;
+  --border-color: #e2e8f0;
+  --error-color: #ef4444;
+  --success-color: #22c55e;
+  --warning-color: #f59e0b;
+  --info-color: #3b82f6;
+
+  /* Radio de bordes */
+  --border-radius-none: 0;
+  --border-radius-small: 0.25rem;
+  --border-radius-medium: 0.375rem;
+  --border-radius-large: 0.5rem;
+  --border-radius-full: 9999px;
+  --border-radius: var(--border-radius-medium);
+
+  /* Espaciado */
+  --spacing-xs: 0.5rem;
+  --spacing-sm: 0.75rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+
+  /* Densidad de diseño */
+  --density-compact: 0.75;
+  --density-comfortable: 1;
+  --density-spacious: 1.25;
+  --density: var(--density-comfortable);
+
+  /* Tamaño de fuente */
+  --font-size-small: 0.875rem;
+  --font-size-medium: 1rem;
+  --font-size-large: 1.125rem;
+  --font-size: var(--font-size-medium);
+
+  /* Animaciones */
+  --transition-fast: 150ms;
+  --transition-normal: 300ms;
+  --transition-slow: 500ms;
+}
+
+/* Tema de color verde */
+[data-color-theme="green"] {
+  --primary-color: #22c55e;
+  --primary-light: #4ade80;
+  --primary-dark: #16a34a;
+  --accent-color: #10b981;
+}
+
+/* Tema de color púrpura */
+[data-color-theme="purple"] {
+  --primary-color: #8b5cf6;
+  --primary-light: #a78bfa;
+  --primary-dark: #7c3aed;
+  --accent-color: #a855f7;
+}
+
+/* Tema de color rojo */
+[data-color-theme="red"] {
+  --primary-color: #ef4444;
+  --primary-light: #f87171;
+  --primary-dark: #dc2626;
+  --accent-color: #f43f5e;
+}
+
+/* Tema de color ámbar */
+[data-color-theme="amber"] {
+  --primary-color: #f59e0b;
+  --primary-light: #fbbf24;
+  --primary-dark: #d97706;
+  --accent-color: #f97316;
+}
+
+/* Tema de color turquesa */
+[data-color-theme="teal"] {
+  --primary-color: #14b8a6;
+  --primary-light: #2dd4bf;
+  --primary-dark: #0d9488;
+  --accent-color: #06b6d4;
+}
+
+/* Tema de color índigo */
+[data-color-theme="indigo"] {
+  --primary-color: #6366f1;
+  --primary-light: #818cf8;
+  --primary-dark: #4f46e5;
+  --accent-color: #4338ca;
+}
+
+/* Tema de color rosa */
+[data-color-theme="pink"] {
+  --primary-color: #ec4899;
+  --primary-light: #f472b6;
+  --primary-dark: #db2777;
+  --accent-color: #d946ef;
+}
+
+/* Modo oscuro */
+[data-theme="dark"] {
+  --background-color: #0f172a;
+  --surface-color: #1e293b;
+  --text-color: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --border-color: #334155;
+}
+
+/* Radio de bordes */
+[data-border-radius="none"] {
+  --border-radius: var(--border-radius-none);
+}
+
+[data-border-radius="small"] {
+  --border-radius: var(--border-radius-small);
+}
+
+[data-border-radius="medium"] {
+  --border-radius: var(--border-radius-medium);
+}
+
+[data-border-radius="large"] {
+  --border-radius: var(--border-radius-large);
+}
+
+[data-border-radius="full"] {
+  --border-radius: var(--border-radius-full);
+}
+
+/* Densidad de diseño */
+[data-layout-density="compact"] {
+  --density: var(--density-compact);
+}
+
+[data-layout-density="comfortable"] {
+  --density: var(--density-comfortable);
+}
+
+[data-layout-density="spacious"] {
+  --density: var(--density-spacious);
+}
+
+/* Tamaño de fuente */
+[data-font-size="small"] {
+  --font-size: var(--font-size-small);
+}
+
+[data-font-size="medium"] {
+  --font-size: var(--font-size-medium);
+}
+
+[data-font-size="large"] {
+  --font-size: var(--font-size-large);
+}
+
+/* Alto contraste */
+[data-high-contrast="true"] {
+  --primary-color: #0066cc;
+  --primary-dark: #0052a3;
+  --text-color: #000000;
+  --background-color: #ffffff;
+  --border-color: #000000;
+  --text-secondary: #333333;
+
+  /* Aumentar el contraste de los elementos interactivos */
+  button, a, input, select, textarea {
+    border-width: 2px !important;
+    outline: 2px solid transparent !important;
+  }
+
+  button:focus, a:focus, input:focus, select:focus, textarea:focus {
+    outline: 2px solid var(--primary-color) !important;
+    outline-offset: 2px !important;
+  }
+}
+
+/* Reducir animaciones */
+[data-reduce-animations="true"] *,
+[data-reduce-animations="true"] *::before,
+[data-reduce-animations="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Aplicar variables CSS a elementos comunes */
+body {
+  background-color: var(--background-color);
+  color: var(--text-color);
+  font-size: var(--font-size);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Clases para aplicar estilos en tiempo real */
+.theme-transition {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+.theme-transition-all {
+  transition: all 0.3s ease;
+}
+
+/* Estilos para tablas con tema dinámico */
+.table-themed {
+  background-color: var(--surface-color);
+  color: var(--text-color);
+  border-collapse: collapse;
+  width: 100%;
+  border-radius: var(--border-radius);
+  overflow: hidden;
+}
+
+.table-themed th,
+.table-themed td {
+  padding: calc(var(--spacing-md) * var(--density));
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.table-themed th {
+  background-color: var(--primary-color);
+  color: white;
+  font-weight: bold;
+}
+
+.table-themed tr:hover {
+  background-color: color-mix(in srgb, var(--primary-color) 10%, var(--surface-color));
+}
+
+.table-themed.striped tr:nth-child(even) {
+  background-color: color-mix(in srgb, var(--background-color) 30%, var(--surface-color));
+}
+
+/* Estilos para gráficos con tema dinámico */
+.chart-themed {
+  background-color: var(--surface-color);
+  color: var(--text-color);
+  border-radius: var(--border-radius);
+  padding: calc(var(--spacing-md) * var(--density));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.chart-themed .chart-title {
+  color: var(--text-color);
+  font-size: calc(var(--font-size) * 1.2);
+  margin-bottom: calc(var(--spacing-md) * var(--density));
+  font-weight: bold;
+}
+
+.chart-themed .chart-legend {
+  color: var(--text-secondary);
+  font-size: calc(var(--font-size) * 0.9);
+}
+
+.chart-themed .chart-axis {
+  stroke: var(--text-secondary);
+}
+
+.chart-themed .chart-grid {
+  stroke: var(--border-color);
+}
+
+/* Estilos para tarjetas con tema dinámico */
+.card-themed {
+  background-color: var(--surface-color);
+  color: var(--text-color);
+  border-radius: var(--border-radius);
+  padding: calc(var(--spacing-md) * var(--density));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border-color);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-themed:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.card-themed .card-header {
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: calc(var(--spacing-sm) * var(--density));
+  margin-bottom: calc(var(--spacing-sm) * var(--density));
+  font-weight: bold;
+  color: var(--text-color);
+}
+
+.card-themed .card-title {
+  color: var(--primary-color);
+  font-size: calc(var(--font-size) * 1.2);
+  margin-bottom: calc(var(--spacing-sm) * var(--density));
+}
+
+.card-themed .card-content {
+  color: var(--text-color);
+}
+
+/* Estilos para botones con tema dinámico */
+.btn-themed {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius);
+  padding: calc(var(--spacing-sm) * var(--density)) calc(var(--spacing-md) * var(--density));
+  font-size: var(--font-size);
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.btn-themed:hover {
+  background-color: var(--primary-dark);
+  transform: translateY(-1px);
+}
+
+.btn-themed:active {
+  transform: translateY(0);
+}
+
+.btn-themed.secondary {
+  background-color: var(--secondary-color);
+}
+
+.btn-themed.accent {
+  background-color: var(--accent-color);
+}
+
+/* Estilos para formularios con tema dinámico */
+.form-themed input,
+.form-themed select,
+.form-themed textarea {
+  background-color: var(--surface-color);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: calc(var(--spacing-sm) * var(--density));
+  font-size: var(--font-size);
+  width: 100%;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-themed input:focus,
+.form-themed select:focus,
+.form-themed textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 30%, transparent);
+}
+
+.form-themed label {
+  color: var(--text-color);
+  font-weight: bold;
+  margin-bottom: calc(var(--spacing-xs) * var(--density));
+  display: block;
+}
+
+button, .btn, input, select, textarea, .card, .panel {
+  border-radius: var(--border-radius);
+  transition: border-radius 0.2s ease;
+}
+
+.container, .wrapper, .layout {
+  padding: calc(var(--spacing-md) * var(--density));
+  margin: calc(var(--spacing-md) * var(--density));
+}
+
+/* Aplicar colores del tema */
+.btn-primary, .primary-button, button.primary {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+}
+
+.btn-primary:hover, .primary-button:hover, button.primary:hover {
+  background-color: var(--primary-dark);
+}
+
+.btn-secondary, .secondary-button, button.secondary {
+  background-color: var(--secondary-color);
+  color: white;
+  border: none;
+}
+
+.card, .panel {
+  background-color: var(--surface-color);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Media queries para diferentes tamaños de pantalla */
+
+/* Dispositivos móviles pequeños (menos de 640px) */
+@media (max-width: 639px) {
+  html {
+    font-size: 14px; /* Reducir tamaño de fuente base en móviles pequeños */
+  }
+  
+  /* Ajustar espaciado y tamaños para móviles */
+  .container, .wrapper, .layout {
+    padding: calc(var(--spacing-sm) * var(--density));
+    margin: calc(var(--spacing-sm) * var(--density));
+  }
+  
+  /* Optimizar tablas para móviles */
+  .table-themed {
+    font-size: 0.875rem;
+  }
+  
+  .table-themed th,
+  .table-themed td {
+    padding: calc(var(--spacing-xs) * var(--density));
+  }
+  
+  /* Hacer botones más grandes para mejor interacción táctil */
+  .btn-themed, button {
+    min-height: 44px; /* Tamaño mínimo recomendado para botones en móviles */
+    padding: calc(var(--spacing-sm) * var(--density)) calc(var(--spacing-md) * var(--density));
+  }
+  
+  /* Mejorar espaciado en formularios */
+  .form-themed input,
+  .form-themed select,
+  .form-themed textarea {
+    padding: calc(var(--spacing-sm) * var(--density));
+    font-size: 1rem;
+  }
+  
+  /* Ajustar tarjetas para móviles */
+  .card-themed {
+    padding: calc(var(--spacing-sm) * var(--density));
+    margin-bottom: calc(var(--spacing-md) * var(--density));
+  }
+}
+
+/* Tablets (640px a 1023px) */
+@media (min-width: 640px) and (max-width: 1023px) {
+  html {
+    font-size: 15px;
+  }
+  
+  /* Ajustar espaciado para tablets */
+  .container, .wrapper, .layout {
+    padding: calc(var(--spacing-md) * var(--density));
+    margin: calc(var(--spacing-md) * var(--density));
+  }
+}
+
+/* Dispositivos grandes (1024px y más) */
+@media (min-width: 1024px) {
+  html {
+    font-size: 16px;
+  }
+  
+  /* Mantener espaciado estándar para dispositivos grandes */
+  .container, .wrapper, .layout {
+    padding: calc(var(--spacing-md) * var(--density));
+    margin: calc(var(--spacing-md) * var(--density));
+  }
+}
+
+/* Orientación específica */
+@media (orientation: landscape) and (max-height: 500px) {
+  /* Ajustes para dispositivos en modo apaisado con altura limitada */
+  header {
+    padding: 0.5rem 0;
+  }
+  
+  nav {
+    padding: 0.25rem 0;
+  }
+}
+
+/* Mejoras para accesibilidad en dispositivos táctiles */
+@media (hover: none) {
+  /* Ajustar elementos interactivos para dispositivos táctiles */
+  button, .btn, a, input, select, textarea {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Mejorar espaciado entre elementos interactivos */
+  button + button,
+  .btn + .btn,
+  a + a {
+    margin-left: 8px;
+  }
+}
+
+/* Optimización para modo de alto contraste */
+@media (prefers-contrast: high) {
+  :root {
+    --primary-color: #0066cc;
+    --primary-dark: #0052a3;
+    --text-color: #000000;
+    --background-color: #ffffff;
+    --border-color: #000000;
+    --text-secondary: #333333;
+  }
+  
+  /* Aumentar el contraste de los elementos interactivos */
+  button, a, input, select, textarea {
+    border-width: 2px !important;
+    outline: 2px solid transparent !important;
+  }
+  
+  button:focus, a:focus, input:focus, select:focus, textarea:focus {
+    outline: 2px solid var(--primary-color) !important;
+    outline-offset: 2px !important;
+  }
+}
+
+/* Optimización para modo oscuro */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background-color: #0f172a;
+    --surface-color: #1e293b;
+    --text-color: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --border-color: #334155;
+  }
+}
+
+/* Optimización para reducir movimiento */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

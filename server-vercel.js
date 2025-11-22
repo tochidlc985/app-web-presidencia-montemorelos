@@ -28,16 +28,16 @@ if (!process.env.JWT_SECRET) {
 
 const app = express();
 
-// Configure CORS for production
+// Configure CORS for production - Mejorado para móviles
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, etc.)
     if (!origin) return callback(null, true);
-    
+
     // Allow specific origins
     const allowedOrigins = [
       'http://localhost:5713',
-      'http://localhost:5173',
+      'http://localhost:6173',
       'https://app-web-presidencia-montemorelos.vercel.app'
     ];
 
@@ -47,7 +47,7 @@ app.use(cors({
         return callback(null, true);
       }
     }
-    
+
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -55,17 +55,30 @@ app.use(cors({
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  credentials: true,
+  optionsSuccessStatus: 204, // Para navegadores antiguos
+  preflightContinue: false
 }));
 
 app.use(bodyParser.json({ limit: '20mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '20mb' }));
 
+// Middleware para detectar dispositivos móviles
+app.use((req, res, next) => {
+  const userAgent = req.headers['user-agent'] || '';
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+  req.isMobile = isMobile;
+  next();
+});
+
 // Serve static files from dist folder (production build)
 const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
+  console.log('Serving static files from:', distPath);
+} else {
+  console.log('Dist directory not found:', distPath);
 }
 
 // API Routes
@@ -73,7 +86,7 @@ if (fs.existsSync(distPath)) {
 app.post('/api/reportes', async (req, res) => {
   try {
     const reporte = req.body;
-    
+
     // Validation
     if (!reporte.email || !reporte.departamento || !reporte.descripcion || !reporte.tipoProblema || !reporte.quienReporta) {
       return res.status(400).json({ message: 'Faltan campos requeridos en el reporte' });
@@ -104,7 +117,7 @@ app.get('/api/reportes', async (req, res) => {
 app.post('/api/register', async (req, res) => {
   try {
     const { nombre, email, password, rol } = req.body;
-    
+
     if (!nombre || !email || !password || !rol) {
       return res.status(400).json({ message: 'Faltan campos requeridos' });
     }
@@ -123,7 +136,7 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    
+
     if (!email || !password) {
       return res.status(400).json({ message: 'Email y contraseña requeridos' });
     }
