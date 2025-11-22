@@ -259,6 +259,15 @@ const Dashboard: React.FC = () => {
 
   // Fetch reportes
   const fetchReportes = useCallback(async (showSuccessMessage = false) => {
+    // Cancelar cualquier edición en curso al recargar datos
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    setEditRowId(null);
+    setEditData({});
+    setAutoSaveStatus('idle');
+
     setIsLoading(true);
 
     try {

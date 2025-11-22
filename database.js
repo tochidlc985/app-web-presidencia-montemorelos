@@ -143,7 +143,13 @@ class DatabaseService {
    */
   async actualizarReporte(id, update) {
     await this.conectarReportes();
-    const result = await this.reportesCollection.updateOne({ _id: new ObjectId(id) }, { $set: update });
+    // Try with ObjectId first
+    let result = await this.reportesCollection.updateOne({ _id: new ObjectId(id) }, { $set: update });
+    if (result.modifiedCount > 0) {
+      return true;
+    }
+    // If not found, try with string
+    result = await this.reportesCollection.updateOne({ _id: id }, { $set: update });
     return result.modifiedCount > 0;
   }
 
@@ -154,7 +160,13 @@ class DatabaseService {
    */
   async eliminarReporte(id) {
     await this.conectarReportes();
-    const result = await this.reportesCollection.deleteOne({ _id: new ObjectId(id) });
+    // Try with ObjectId first
+    let result = await this.reportesCollection.deleteOne({ _id: new ObjectId(id) });
+    if (result.deletedCount > 0) {
+      return true;
+    }
+    // If not found, try with string
+    result = await this.reportesCollection.deleteOne({ _id: id });
     return result.deletedCount > 0;
   }
 
@@ -446,7 +458,12 @@ class DatabaseService {
    */
   async obtenerReportePorId(id) {
     await this.conectarReportes();
-    return await this.reportesCollection.findOne({ _id: new ObjectId(id) });
+    // Try with ObjectId first
+    let reporte = await this.reportesCollection.findOne({ _id: new ObjectId(id) });
+    if (reporte) return reporte;
+    // If not found, try with string
+    reporte = await this.reportesCollection.findOne({ _id: id });
+    return reporte;
   }
 
   /**

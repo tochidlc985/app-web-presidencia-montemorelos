@@ -153,14 +153,14 @@ app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
     const files = req.files || [];
     const reporte = req.body.data ? JSON.parse(req.body.data) : req.body;
 
-    // Validación robusta
-    if (!reporte.email || !reporte.departamento || !reporte.descripcion || !reporte.tipoProblema || !reporte.quienReporta) {
+    // Validación robusta - email es opcional para creaciones internas
+    if (!reporte.departamento || !reporte.descripcion || !reporte.tipoProblema || !reporte.quienReporta) {
       return res.status(400).json({ message: 'Faltan campos requeridos en el reporte' });
     }
     if (!Array.isArray(reporte.departamento) || reporte.departamento.length === 0) {
       return res.status(400).json({ message: 'El campo departamento debe ser un arreglo con al menos un valor' });
     }
-    if (typeof reporte.email !== 'string' || !reporte.email.includes('@')) {
+    if (reporte.email && (typeof reporte.email !== 'string' || !reporte.email.includes('@'))) {
       return res.status(400).json({ message: 'Email inválido' });
     }
     if (files.some(f => f.size > 10 * 1024 * 1024)) {
@@ -171,7 +171,7 @@ app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
 
     const ok = await db.guardarReporte(reporte);
     if (ok) {
-      res.status(201).json({ message: 'Reporte guardado correctamente' });
+      res.status(201).json({ message: 'Reporte guardado correctamente', insertedId: ok.insertedId });
     } else {
       res.status(500).json({ message: 'Error al guardar el reporte' });
     }
