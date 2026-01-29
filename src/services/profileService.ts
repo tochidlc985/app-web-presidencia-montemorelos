@@ -130,7 +130,22 @@ export const updateUserProfile = async (userData: Usuario): Promise<Usuario> => 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Respuesta del servidor:', response.status, errorText);
-      throw new Error(`Error del servidor: ${response.status}. ${errorText}`);
+      
+      // Intentar parsear el error como JSON para obtener un mensaje más detallado
+      let errorMessage = `Error del servidor: ${response.status}`;
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData.message) {
+          errorMessage = errorData.message;
+        } else if (errorData.error) {
+          errorMessage = `${errorMessage}. ${errorData.error}`;
+        }
+      } catch (parseError) {
+        // Si no se puede parsear como JSON, usar el texto plano
+        errorMessage = errorText || errorMessage;
+      }
+      
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();

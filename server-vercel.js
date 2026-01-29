@@ -256,9 +256,30 @@ app.put('/api/perfil/:email', async (req, res) => {
     console.log(`Intentando actualizar perfil para email: ${req.params.email}`);
     console.log('Datos a actualizar:', JSON.stringify(req.body, null, 2));
 
-    // First check if user exists
-    const existingUser = await db.buscarPerfilPorEmail(req.params.email);
-    console.log('Usuario existente:', existingUser ? 'Sí' : 'No');
+    // Validar que el email en el cuerpo coincida con el de la URL
+    if (req.body.email && req.body.email !== req.params.email) {
+      return res.status(400).json({ 
+        message: 'El email en el cuerpo no coincide con el email en la URL' 
+      });
+    }
+
+    // Validar datos requeridos mínimos
+    const requiredFields = ['nombre', 'departamento'];
+    const missingFields = requiredFields.filter(field => !req.body[field]);
+    
+    if (missingFields.length > 0) {
+      return res.status(400).json({ 
+        message: `Faltan campos requeridos: ${missingFields.join(', ')}` 
+      });
+    }
+
+    // Validar formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(req.params.email)) {
+      return res.status(400).json({ 
+        message: 'Formato de email inválido' 
+      });
+    }
 
     const ok = await db.actualizarPerfilUsuario(req.params.email, req.body);
     console.log('Resultado de actualizarPerfilUsuario:', ok);
@@ -288,7 +309,28 @@ app.put('/api/perfil/:email', async (req, res) => {
     }
   } catch (error) {
     console.error(`Error al actualizar perfil para email: ${req.params.email}:`, error);
-    res.status(500).json({ message: 'Error al actualizar perfil', error: error.message });
+    
+    // Proporcionar un mensaje de error más específico
+    let errorMessage = 'Error interno del servidor';
+    
+    if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    // Si es un error de validación o lógica, usar 400
+    if (error.message && (
+      error.message.includes('Faltan campos') ||
+      error.message.includes('Formato de email') ||
+      error.message.includes('no coincide')
+    )) {
+      res.status(400).json({ message: errorMessage });
+    } else {
+      // Para errores de base de datos u otros errores internos
+      res.status(500).json({ 
+        message: 'Error al actualizar perfil', 
+        error: errorMessage 
+      });
+    }
   }
 });
 

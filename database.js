@@ -350,37 +350,53 @@ class DatabaseService {
       const existingUser = await this.usersInternosCollection.findOne({ email });
       console.log(`Usuario existente en DB para ${email}:`, existingUser ? 'Sí' : 'No');
 
-      // Always try to update first, if no document exists, it will be handled
+      if (!existingUser) {
+        console.log(`Usuario no encontrado para ${email}, creando nuevo perfil...`);
+        // Crear nuevo usuario si no existe
+        const newUser = {
+          nombre: cleanUpdateData.nombre || email.split('@')[0],
+          email: email,
+          password: cleanUpdateData.password || await bcrypt.hash('default123', 10),
+          rol: cleanUpdateData.rol || 'usuario',
+          fechaRegistro: new Date(),
+          fechaActualizacion: new Date(),
+          ...cleanUpdateData
+        };
+        
+        const insertResult = await this.usersInternosCollection.insertOne(newUser);
+        console.log(`Nuevo usuario creado para ${email}:`, insertResult.acknowledged);
+        return insertResult.acknowledged;
+      }
+
+      // Si el usuario existe, actualizarlo
       const result = await this.usersInternosCollection.updateOne(
         { email },
         {
           $set: {
             ...cleanUpdateData,
             fechaActualizacion: new Date()
-          },
-          $setOnInsert: {
-            fechaRegistro: new Date(),
-            rol: cleanUpdateData.rol || 'usuario'
           }
-        },
-        { upsert: true } // Create if doesn't exist
+        }
       );
 
       console.log(`Resultado de actualización para ${email}:`, result);
 
-      // If upserted (new document created), or modified, it's successful
-      if (result.acknowledged && (result.modifiedCount > 0 || result.upsertedCount > 0)) {
-        console.log(`Perfil actualizado/creado exitosamente para ${email}`);
+      // Verificar si la actualización fue exitosa
+      if (result.acknowledged && result.modifiedCount > 0) {
+        console.log(`Perfil actualizado exitosamente para ${email}`);
         return true;
+      } else if (result.acknowledged && result.modifiedCount === 0) {
+        // No se realizaron cambios, pero la operación fue exitosa
+        console.log(`No se realizaron cambios para ${email}, pero la operación fue exitosa`);
+        return true;
+      } else {
+        console.log(`Error al actualizar perfil para ${email}`);
+        return false;
       }
-
-      // If no changes were made, still consider it successful for existing data
-      console.log(`No se realizaron cambios para ${email}, pero la operación fue exitosa`);
-      return true;
 
     } catch (error) {
       console.error(`Error al actualizar perfil para ${email}:`, error);
-      return false;
+      throw error; // Lanzar el error para que el endpoint pueda manejarlo adecuadamente
     }
   }
 
