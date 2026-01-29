@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import { fileURLToPath } from 'url';
 import { db } from './database.js';
+import multer from 'multer';
 
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
@@ -61,6 +62,19 @@ app.use(cors({
   preflightContinue: false
 }));
 
+// Configure multer for file uploads
+const upload = multer({
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Tipo de archivo no permitido. Solo imágenes JPG, PNG, GIF, WEBP.'), false);
+    }
+  }
+});
+
 app.use(bodyParser.json({ limit: '20mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '20mb' }));
 
@@ -83,18 +97,24 @@ if (fs.existsSync(distPath)) {
 
 // API Routes
 // Report routes
-app.post('/api/reportes', async (req, res) => {
+app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
   try {
-    const reporte = req.body;
+    const files = req.files || [];
+    const reporte = req.body.data ? JSON.parse(req.body.data) : req.body;
 
     // Validation
-    if (!reporte.email || !reporte.departamento || !reporte.descripcion || !reporte.tipoProblema || !reporte.quienReporta) {
+    if (!reporte.departamento || !reporte.descripcion || !reporte.tipoProblema || !reporte.quienReporta) {
       return res.status(400).json({ message: 'Faltan campos requeridos en el reporte' });
+    }
+
+    // Add uploaded file URLs to the report (for Vercel, we'll use placeholder URLs)
+    if (files && files.length > 0) {
+      reporte.imagenes = files.map(file => `/uploads/${file.filename}`);
     }
 
     const ok = await db.guardarReporte(reporte);
     if (ok) {
-      res.status(201).json({ message: 'Reporte guardado correctamente' });
+      res.status(201).json({ message: 'Reporte guardado correctamente', insertedId: ok.insertedId });
     } else {
       res.status(500).json({ message: 'Error al guardar el reporte' });
     }
@@ -176,6 +196,58 @@ app.get('/api/perfil/:email', async (req, res) => {
     res.json(perfil);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener perfil', error: error.message });
+  }
+});
+
+// Subir foto de perfil
+app.post('/api/perfil/:email/foto', upload.single('foto'), async (req, res) => {
+  try {
+    const { email } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'No se ha proporcionado ninguna foto' });
+    }
+
+    const foto = req.file;
+
+    // Generar un nombre único para la foto
+    const timestamp = Date.now();
+    const fotoName = `${timestamp}-${foto.originalname}`;
+
+    // En Vercel, no podemos guardar archivos localmente, así que usamos una URL temporal
+    // En un entorno de producción, deberías usar un servicio de almacenamiento como AWS S3
+    const fotoUrl = `/uploads/${fotoName}`;
+
+    // Actualizar el perfil con la URL de la foto
+    const ok = await db.actualizarPerfilUsuario(email, { foto: fotoUrl });
+
+    if (ok) {
+      res.json({ fotoUrl });
+    } else {
+      res.status(404).json({ message: 'Perfil no encontrado' });
+    }
+  } catch (error) {
+    console.error('Error al subir foto de perfil:', error);
+    res.status(500).json({ message: 'Error al subir foto de perfil', error: error.message });
+  }
+});
+
+// Eliminar foto de perfil
+app.delete('/api/perfil/:email/foto', async (req, res) => {
+  try {
+    const { email } = req.params;
+    
+    // Actualizar el perfil eliminando la foto
+    const ok = await db.actualizarPerfilUsuario(email, { foto: null });
+    
+    if (ok) {
+      res.json({ message: 'Foto eliminada correctamente' });
+    } else {
+      res.status(404).json({ message: 'Perfil no encontrado' });
+    }
+  } catch (error) {
+    console.error('Error al eliminar foto de perfil:', error);
+    res.status(500).json({ message: 'Error al eliminar foto de perfil', error: error.message });
   }
 });
 
