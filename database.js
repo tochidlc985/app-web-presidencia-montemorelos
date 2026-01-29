@@ -346,6 +346,10 @@ class DatabaseService {
         cleanUpdateData.password = await bcrypt.hash(cleanUpdateData.password, 10);
       }
 
+      // First check if user exists
+      const existingUser = await this.usersInternosCollection.findOne({ email });
+      console.log(`Usuario existente en DB para ${email}:`, existingUser ? 'Sí' : 'No');
+
       // Always try to update first, if no document exists, it will be handled
       const result = await this.usersInternosCollection.updateOne(
         { email },

@@ -256,13 +256,20 @@ app.put('/api/perfil/:email', async (req, res) => {
     console.log(`Intentando actualizar perfil para email: ${req.params.email}`);
     console.log('Datos a actualizar:', JSON.stringify(req.body, null, 2));
 
+    // First check if user exists
+    const existingUser = await db.buscarPerfilPorEmail(req.params.email);
+    console.log('Usuario existente:', existingUser ? 'Sí' : 'No');
+
     const ok = await db.actualizarPerfilUsuario(req.params.email, req.body);
+    console.log('Resultado de actualizarPerfilUsuario:', ok);
+
     if (ok) {
       console.log(`Perfil actualizado correctamente para email: ${req.params.email}`);
 
       // Obtener el perfil actualizado para devolverlo
       try {
         const perfilActualizado = await db.buscarPerfilPorEmail(req.params.email);
+        console.log('Perfil actualizado obtenido:', perfilActualizado);
         res.json({
           message: 'Perfil actualizado correctamente',
           usuario: perfilActualizado
@@ -276,8 +283,8 @@ app.put('/api/perfil/:email', async (req, res) => {
         });
       }
     } else {
-      console.log(`No se encontró perfil para email: ${req.params.email}`);
-      res.status(404).json({ message: 'Perfil no encontrado' });
+      console.log(`No se pudo actualizar perfil para email: ${req.params.email}`);
+      res.status(500).json({ message: 'Error al actualizar perfil' });
     }
   } catch (error) {
     console.error(`Error al actualizar perfil para email: ${req.params.email}:`, error);
