@@ -330,103 +330,54 @@ class DatabaseService {
    * @returns {boolean} True si se actualizó correctamente
    */
   async actualizarPerfilUsuario(email, updateData) {
-    await this.conectarInternos();
-
-    // Guardar el rol antes de eliminarlo
-    const rol = updateData.rol || 'usuario';
-
-    if (updateData.password) {
-      updateData.password = await bcrypt.hash(updateData.password, 10);
-    }
-    delete updateData._id;
-    delete updateData.rol;
-    delete updateData.email;
-    delete updateData.fechaRegistro;
-
-    // Verificar si el usuario existe
-    let usuario = await this.usersInternosCollection.findOne({ email });
-    let result;
-
-    if (!usuario) {
-      console.log(`Usuario con email ${email} no encontrado, creando nuevo usuario`);
-
-      // Si no hay nombre en los datos a actualizar, usar el email como nombre
-      const nombre = updateData.nombre || email.split('@')[0];
-
-      // Crear un nuevo usuario
-      const hashedPassword = await bcrypt.hash('temporal123', 10); // Contraseña temporal
-      const nuevoUsuario = {
-        nombre,
-        email,
-        password: hashedPassword,
-        rol,
-        fechaRegistro: new Date(),
-        ...updateData
-      };
-
-      try {
-        const insertResult = await this.usersInternosCollection.insertOne(nuevoUsuario);
-        if (insertResult.acknowledged) {
-          usuario = { ...nuevoUsuario, _id: insertResult.insertedId };
-          result = { modifiedCount: 1 }; // Simular una modificación exitosa
-          console.log(`Usuario creado exitosamente con email ${email}`);
-        } else {
-          console.error(`No se pudo crear el usuario con email ${email}`);
-          return false;
-        }
-      } catch (insertError) {
-        console.error(`Error al insertar nuevo usuario con email ${email}:`, insertError);
-        return false;
-      }
-    } else {
-      // Actualizar en la colección principal de usuarios
-      try {
-        result = await this.usersInternosCollection.updateOne({ email }, { $set: updateData });
-        console.log(`Usuario actualizado exitosamente con email ${email}`);
-      } catch (updateError) {
-        console.error(`Error al actualizar usuario con email ${email}:`, updateError);
-        return false;
-      }
-    }
-
-    // También actualizar en la colección de perfiles correspondiente
     try {
-      const dbPerfil = await this.connectToDatabase(this.DB_NAME_PERFIL);
+      await this.conectarInternos();
 
-      let coleccionPerfil;
-      if (usuario.rol === 'administrador') {
-        coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_ADMINISTRADOR_PERFIL);
-      } else if (usuario.rol === 'jefe_departamento') {
-        coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_JEFE_DEPARTAMENTO_PERFIL);
-      } else if (usuario.rol === 'tecnico') {
-        coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_TECNICO_PERFIL);
-      } else {
-        coleccionPerfil = dbPerfil.collection(this.COLLECTION_NAME_USUARIO_PERFIL);
+      console.log(`Actualizando perfil para ${email}:`, updateData);
+
+      // Limpiar datos que no deben actualizarse
+      const cleanUpdateData = { ...updateData };
+      delete cleanUpdateData._id;
+      delete cleanUpdateData.email;
+      delete cleanUpdateData.fechaRegistro;
+
+      // Hash password if provided
+      if (cleanUpdateData.password) {
+        cleanUpdateData.password = await bcrypt.hash(cleanUpdateData.password, 10);
       }
 
-      // Verificar si ya existe un perfil para este usuario
-      const perfilExistente = await coleccionPerfil.findOne({ email });
+      // Always try to update first, if no document exists, it will be handled
+      const result = await this.usersInternosCollection.updateOne(
+        { email },
+        {
+          $set: {
+            ...cleanUpdateData,
+            fechaActualizacion: new Date()
+          },
+          $setOnInsert: {
+            fechaRegistro: new Date(),
+            rol: cleanUpdateData.rol || 'usuario'
+          }
+        },
+        { upsert: true } // Create if doesn't exist
+      );
 
-      if (!perfilExistente) {
-        // Si no existe, crear un nuevo perfil en la colección correspondiente
-        await coleccionPerfil.insertOne({
-          ...usuario,
-          ...updateData,
-          fechaActualizacion: new Date()
-        });
-      } else {
-        // Si ya existe, actualizarlo
-        await coleccionPerfil.updateOne(
-          { email },
-          { $set: { ...updateData, fechaActualizacion: new Date() } }
-        );
+      console.log(`Resultado de actualización para ${email}:`, result);
+
+      // If upserted (new document created), or modified, it's successful
+      if (result.acknowledged && (result.modifiedCount > 0 || result.upsertedCount > 0)) {
+        console.log(`Perfil actualizado/creado exitosamente para ${email}`);
+        return true;
       }
+
+      // If no changes were made, still consider it successful for existing data
+      console.log(`No se realizaron cambios para ${email}, pero la operación fue exitosa`);
+      return true;
+
     } catch (error) {
-      console.error('Error al actualizar en colección de perfiles:', error);
-      // No lanzamos el error para no interrumpir el flujo principal
+      console.error(`Error al actualizar perfil para ${email}:`, error);
+      return false;
     }
-
-    return result.modifiedCount > 0;
   }
 
   /**
