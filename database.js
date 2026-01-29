@@ -275,7 +275,9 @@ class DatabaseService {
 
     const { password: _, ...perfil } = usuario;
 
-    // Dependiendo del rol, guardamos también en la colección específica de perfiles
+    // Primero intentar obtener el perfil de la colección específica de perfiles
+    let perfilCompleto = { ...perfil, _id: perfil._id.toString() };
+
     if (usuario.rol) {
       try {
         const dbPerfil = await this.connectToDatabase(this.DB_NAME_PERFIL);
@@ -294,31 +296,31 @@ class DatabaseService {
         // Verificar si ya existe un perfil para este usuario
         const perfilExistente = await coleccionPerfil.findOne({ email });
 
-        if (!perfilExistente) {
+        if (perfilExistente) {
+          // Combinar datos del usuario base con datos específicos del perfil
+          perfilCompleto = {
+            ...perfilCompleto,
+            ...perfilExistente,
+            _id: perfil._id.toString() // Mantener el ID del usuario base
+          };
+          // Convertir ObjectId a string si existe
+          if (perfilExistente._id) {
+            perfilCompleto._id = perfilExistente._id.toString();
+          }
+        } else {
           // Si no existe, crear un nuevo perfil en la colección correspondiente
           await coleccionPerfil.insertOne({
             ...perfil,
             fechaActualizacion: new Date()
           });
-        } else {
-          // Si ya existe, actualizarlo
-          await coleccionPerfil.updateOne(
-            { email },
-            {
-              $set: {
-                ...perfil,
-                fechaActualizacion: new Date()
-              }
-            }
-          );
         }
       } catch (error) {
-        console.error('Error al guardar en colección de perfiles:', error);
-        // No lanzamos el error para no interrumpir el flujo principal
+        console.error('Error al acceder a colección de perfiles:', error);
+        // Continuar con el perfil básico si hay error
       }
     }
 
-    return { ...perfil, _id: perfil._id.toString() };
+    return perfilCompleto;
   }
 
   /**
