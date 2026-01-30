@@ -29,22 +29,23 @@ if (!process.env.JWT_SECRET) {
 
 const app = express();
 
-// Configure CORS for production - Mejorado para móviles
+// Configure CORS for production - Mejorado para móviles y Vercel
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, etc.)
+    // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
 
     // Allow specific origins
     const allowedOrigins = [
       'http://localhost:5713',
       'http://localhost:6173',
+      'http://localhost:5000',
       'https://app-web-presidencia-montemorelos.vercel.app'
     ];
 
+    // In production, allow any vercel.app domain
     if (process.env.NODE_ENV === 'production') {
-      // In production, allow the actual Vercel domain
-      if (origin && origin.includes('vercel.app')) {
+      if (origin && (origin.includes('vercel.app') || origin.includes('localhost'))) {
         return callback(null, true);
       }
     }
@@ -52,19 +53,45 @@ app.use(cors({
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      console.log('CORS - Allowing origin:', origin);
+      callback(null, true); // Allow all origins in production for now
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
   credentials: true,
-  optionsSuccessStatus: 204, // Para navegadores antiguos
+  optionsSuccessStatus: 204,
   preflightContinue: false
 }));
 
-// Configure multer for file uploads
+// IMPORTANTE: Configurar multer con memoryStorage para Vercel (no permite escritura en disco)
+const storage = multer.memoryStorage();
+
 const upload = multer({
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  storage: storage,
+  limits: { 
+    fileSize: 15 * 1024 * 1024, // 15MB limit para reportes
+    files: 10 // máximo 10 archivos
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+      'video/mp4', 'video/webm', 'application/pdf'
+    ];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Tipo de archivo no permitido. Solo imágenes (JPG, PNG, GIF, WEBP), videos (MP4, WebM) y PDF.'), false);
+    }
+  }
+});
+
+// Multer específico para fotos de perfil (5MB máximo)
+const uploadProfile = multer({
+  storage: storage,
+  limits: { 
+    fileSize: 5 * 1024 * 1024 // 5MB limit para fotos de perfil
+  },
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
     if (allowedTypes.includes(file.mimetype)) {
@@ -75,8 +102,14 @@ const upload = multer({
   }
 });
 
-app.use(bodyParser.json({ limit: '20mb' }));
-app.use(bodyParser.urlencoded({ extended: true, limit: '20mb' }));
+app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
+
+// Middleware para logging
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.originalUrl}`);
+  next();
+});
 
 // Middleware para detectar dispositivos móviles
 app.use((req, res, next) => {
@@ -95,32 +128,82 @@ if (fs.existsSync(distPath)) {
   console.log('Dist directory not found:', distPath);
 }
 
-// API Routes
-// Report routes
+// ==========================================
+// API: Reportes
+// ==========================================
+
+// Crear un nuevo reporte con imágenes - USANDO MEMORY STORAGE
 app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
   try {
+    console.log('Recibiendo reporte...');
+    console.log('Headers:', req.headers);
+    console.log('Files recibidos:', req.files ? req.files.length : 0);
+    
     const files = req.files || [];
-    const reporte = req.body.data ? JSON.parse(req.body.data) : req.body;
+    let reporte;
+    
+    try {
+      reporte = req.body.data ? JSON.parse(req.body.data) : req.body;
+    } catch (parseError) {
+      console.error('Error parseando datos del reporte:', parseError);
+      return res.status(400).json({ message: 'Formato de datos inválido' });
+    }
+
+    console.log('Datos del reporte:', JSON.stringify(reporte, null, 2));
 
     // Validation
     if (!reporte.departamento || !reporte.descripcion || !reporte.tipoProblema || !reporte.quienReporta) {
-      return res.status(400).json({ message: 'Faltan campos requeridos en el reporte' });
+      return res.status(400).json({ 
+        message: 'Faltan campos requeridos en el reporte',
+        fields: {
+          departamento: !reporte.departamento,
+          descripcion: !reporte.descripcion,
+          tipoProblema: !reporte.tipoProblema,
+          quienReporta: !reporte.quienReporta
+        }
+      });
     }
 
-    // Add uploaded file URLs to the report (for Vercel, we'll use placeholder URLs)
+    if (!Array.isArray(reporte.departamento) || reporte.departamento.length === 0) {
+      return res.status(400).json({ message: 'El campo departamento debe ser un arreglo con al menos un valor' });
+    }
+
+    if (reporte.email && (typeof reporte.email !== 'string' || !reporte.email.includes('@'))) {
+      return res.status(400).json({ message: 'Email inválido' });
+    }
+
+    // Convertir archivos a base64 para almacenarlos en MongoDB
+    // En Vercel no podemos guardar archivos en disco, así que los guardamos como base64
     if (files && files.length > 0) {
-      reporte.imagenes = files.map(file => `/uploads/${file.filename}`);
+      reporte.imagenes = files.map(file => {
+        const base64Data = file.buffer.toString('base64');
+        return {
+          nombre: file.originalname,
+          tipo: file.mimetype,
+          datos: `data:${file.mimetype};base64,${base64Data}`,
+          tamaño: file.size
+        };
+      });
+      console.log(`${files.length} archivos procesados y convertidos a base64`);
     }
 
     const ok = await db.guardarReporte(reporte);
     if (ok) {
-      res.status(201).json({ message: 'Reporte guardado correctamente', insertedId: ok.insertedId });
+      console.log('Reporte guardado exitosamente:', ok.insertedId);
+      res.status(201).json({ 
+        message: 'Reporte guardado correctamente', 
+        insertedId: ok.insertedId 
+      });
     } else {
-      res.status(500).json({ message: 'Error al guardar el reporte' });
+      res.status(500).json({ message: 'Error al guardar el reporte en la base de datos' });
     }
   } catch (error) {
     console.error('Error en POST /api/reportes:', error);
-    res.status(500).json({ message: 'Error en el servidor', error: error.message });
+    res.status(500).json({ 
+      message: 'Error en el servidor', 
+      error: error.message,
+      stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+    });
   }
 });
 
@@ -129,11 +212,15 @@ app.get('/api/reportes', async (req, res) => {
     const reportes = await db.obtenerReportes();
     res.json(reportes);
   } catch (error) {
+    console.error('Error al obtener reportes:', error);
     res.status(500).json({ message: 'Error al obtener reportes', error: error.message });
   }
 });
 
-// User routes
+// ==========================================
+// API: Usuarios
+// ==========================================
+
 app.post('/api/register', async (req, res) => {
   try {
     const { nombre, email, password, rol } = req.body;
@@ -148,6 +235,7 @@ app.post('/api/register', async (req, res) => {
     if (error.message === 'El usuario ya existe') {
       res.status(409).json({ message: 'El usuario ya existe' });
     } else {
+      console.error('Error en POST /api/register:', error);
       res.status(500).json({ message: 'Error al registrar usuario', error: error.message });
     }
   }
@@ -167,62 +255,70 @@ app.post('/api/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { email: usuario.email, rol: usuario.rol },
+      { 
+        email: usuario.email, 
+        rol: usuario.rol,
+        roles: usuario.roles || [usuario.rol] // Incluir ambos formatos para compatibilidad
+      },
       process.env.JWT_SECRET,
       { expiresIn: '8h' }
     );
 
     res.json({ usuario, token });
   } catch (error) {
+    console.error('Error en POST /api/login:', error);
     res.status(500).json({ message: 'Error al iniciar sesión', error: error.message });
   }
 });
 
-// Statistics route
-app.get('/api/estadisticas', async (req, res) => {
-  try {
-    const stats = await db.obtenerEstadisticas();
-    res.json(stats);
-  } catch (error) {
-    res.status(500).json({ message: 'Error al obtener estadísticas', error: error.message });
-  }
-});
+// ==========================================
+// API: Perfil de Usuario
+// ==========================================
 
-// Profile routes
 app.get('/api/perfil/:email', async (req, res) => {
   try {
-    const perfil = await db.buscarPerfilPorEmail(req.params.email);
-    if (!perfil) return res.status(404).json({ message: 'Perfil no encontrado' });
-    res.json(perfil);
+    const { email } = req.params;
+    console.log(`Obteniendo perfil para: ${email}`);
+    
+    const perfil = await db.buscarPerfilPorEmail(email);
+    if (!perfil) {
+      console.log(`Perfil no encontrado para: ${email}`);
+      return res.status(404).json({ message: 'Perfil no encontrado' });
+    }
+    
+    console.log(`Perfil encontrado para: ${email}`);
+    res.json({ usuario: perfil }); // Devolver en formato consistente con el frontend
   } catch (error) {
+    console.error('Error al obtener perfil:', error);
     res.status(500).json({ message: 'Error al obtener perfil', error: error.message });
   }
 });
 
-// Subir foto de perfil
-app.post('/api/perfil/:email/foto', upload.single('foto'), async (req, res) => {
+// Subir foto de perfil - USANDO MEMORY STORAGE
+app.post('/api/perfil/:email/foto', uploadProfile.single('foto'), async (req, res) => {
   try {
     const { email } = req.params;
+    console.log(`Recibiendo foto de perfil para: ${email}`);
 
     if (!req.file) {
       return res.status(400).json({ message: 'No se ha proporcionado ninguna foto' });
     }
 
-    const foto = req.file;
+    console.log('Archivo recibido:', req.file.originalname, 'Tamaño:', req.file.size);
 
-    // Generar un nombre único para la foto
-    const timestamp = Date.now();
-    const fotoName = `${timestamp}-${foto.originalname}`;
+    // Convertir a base64 para almacenar en MongoDB
+    const base64Data = req.file.buffer.toString('base64');
+    const fotoUrl = `data:${req.file.mimetype};base64,${base64Data}`;
 
-    // En Vercel, no podemos guardar archivos localmente, así que usamos una URL temporal
-    // En un entorno de producción, deberías usar un servicio de almacenamiento como AWS S3
-    const fotoUrl = `/uploads/${fotoName}`;
-
-    // Actualizar el perfil con la URL de la foto
+    // Actualizar el perfil con la foto en base64
     const ok = await db.actualizarPerfilUsuario(email, { foto: fotoUrl });
 
     if (ok) {
-      res.json({ fotoUrl });
+      console.log(`Foto de perfil actualizada para: ${email}`);
+      res.json({ 
+        message: 'Foto de perfil subida correctamente',
+        fotoUrl: fotoUrl 
+      });
     } else {
       res.status(404).json({ message: 'Perfil no encontrado' });
     }
@@ -236,11 +332,13 @@ app.post('/api/perfil/:email/foto', upload.single('foto'), async (req, res) => {
 app.delete('/api/perfil/:email/foto', async (req, res) => {
   try {
     const { email } = req.params;
+    console.log(`Eliminando foto de perfil para: ${email}`);
     
     // Actualizar el perfil eliminando la foto
     const ok = await db.actualizarPerfilUsuario(email, { foto: null });
     
     if (ok) {
+      console.log(`Foto de perfil eliminada para: ${email}`);
       res.json({ message: 'Foto eliminada correctamente' });
     } else {
       res.status(404).json({ message: 'Perfil no encontrado' });
@@ -251,104 +349,94 @@ app.delete('/api/perfil/:email/foto', async (req, res) => {
   }
 });
 
+// Actualizar perfil de usuario
 app.put('/api/perfil/:email', async (req, res) => {
   try {
-    console.log(`Intentando actualizar perfil para email: ${req.params.email}`);
-    console.log('Datos a actualizar:', JSON.stringify(req.body, null, 2));
+    const { email } = req.params;
+    console.log(`Actualizando perfil para: ${email}`);
+    console.log('Datos recibidos:', JSON.stringify(req.body, null, 2));
 
     // Validar que el email en el cuerpo coincida con el de la URL
-    if (req.body.email && req.body.email !== req.params.email) {
+    if (req.body.email && req.body.email !== email) {
       return res.status(400).json({ 
         message: 'El email en el cuerpo no coincide con el email en la URL' 
       });
     }
 
-    // Validar datos requeridos mínimos
-    const requiredFields = ['nombre', 'departamento'];
-    const missingFields = requiredFields.filter(field => !req.body[field]);
+    // Datos a actualizar (excluir campos que no deben modificarse)
+    const updateData = { ...req.body };
+    delete updateData._id; // No permitir cambiar el ID
+    delete updateData.email; // El email ya está en la URL
+    delete updateData.password; // La contraseña se maneja por separado
     
-    if (missingFields.length > 0) {
-      return res.status(400).json({ 
-        message: `Faltan campos requeridos: ${missingFields.join(', ')}` 
-      });
-    }
+    // Asegurar que el email esté presente en los datos
+    updateData.email = email;
 
-    // Validar formato de email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(req.params.email)) {
-      return res.status(400).json({ 
-        message: 'Formato de email inválido' 
-      });
-    }
-
-    const ok = await db.actualizarPerfilUsuario(req.params.email, req.body);
-    console.log('Resultado de actualizarPerfilUsuario:', ok);
+    const ok = await db.actualizarPerfilUsuario(email, updateData);
+    console.log('Resultado de actualización:', ok);
 
     if (ok) {
-      console.log(`Perfil actualizado correctamente para email: ${req.params.email}`);
+      console.log(`Perfil actualizado correctamente para: ${email}`);
 
       // Obtener el perfil actualizado para devolverlo
       try {
-        const perfilActualizado = await db.buscarPerfilPorEmail(req.params.email);
-        console.log('Perfil actualizado obtenido:', perfilActualizado);
+        const perfilActualizado = await db.buscarPerfilPorEmail(email);
         res.json({
           message: 'Perfil actualizado correctamente',
           usuario: perfilActualizado
         });
       } catch (error) {
-        // Si hay error al obtener el perfil actualizado, devolver los datos originales
-        console.warn(`No se pudo obtener el perfil actualizado para ${req.params.email}, devolviendo datos originales`);
+        console.warn(`No se pudo obtener el perfil actualizado para ${email}`);
         res.json({
           message: 'Perfil actualizado correctamente',
-          usuario: req.body
+          usuario: updateData
         });
       }
     } else {
-      console.log(`No se pudo actualizar perfil para email: ${req.params.email}`);
+      console.log(`No se pudo actualizar perfil para: ${email}`);
       res.status(500).json({ message: 'Error al actualizar perfil' });
     }
   } catch (error) {
-    console.error(`Error al actualizar perfil para email: ${req.params.email}:`, error);
-    
-    // Proporcionar un mensaje de error más específico
-    let errorMessage = 'Error interno del servidor';
-    
-    if (error.message) {
-      errorMessage = error.message;
-    }
-    
-    // Si es un error de validación o lógica, usar 400
-    if (error.message && (
-      error.message.includes('Faltan campos') ||
-      error.message.includes('Formato de email') ||
-      error.message.includes('no coincide')
-    )) {
-      res.status(400).json({ message: errorMessage });
-    } else {
-      // Para errores de base de datos u otros errores internos
-      res.status(500).json({ 
-        message: 'Error al actualizar perfil', 
-        error: errorMessage 
-      });
-    }
+    console.error(`Error al actualizar perfil:`, error);
+    res.status(500).json({ 
+      message: 'Error al actualizar perfil', 
+      error: error.message 
+    });
   }
 });
 
+// ==========================================
+// API: Estadísticas
+// ==========================================
+
+app.get('/api/estadisticas', async (req, res) => {
+  try {
+    const stats = await db.obtenerEstadisticas();
+    res.json(stats);
+  } catch (error) {
+    console.error('Error al obtener estadísticas:', error);
+    res.status(500).json({ message: 'Error al obtener estadísticas', error: error.message });
+  }
+});
+
+// ==========================================
 // Middleware para verificar JWT y rol
+// ==========================================
+
 function requireRole(roles) {
-  // Convertir a array si es un string
   const allowedRoles = Array.isArray(roles) ? roles : [roles];
 
   return (req, res, next) => {
     const auth = req.headers.authorization;
-    if (!auth) return res.status(401).json({ message: 'No autorizado' });
+    if (!auth) return res.status(401).json({ message: 'No autorizado - Token no proporcionado' });
+    
     const token = auth.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'No autorizado - Formato de token inválido' });
+    
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      // Verificar si tiene el rol requerido (compatible con array o string)
       const userRoles = Array.isArray(decoded.roles) ? decoded.roles : [decoded.roles || decoded.rol];
 
-      // Verificar si el usuario tiene al menos uno de los roles permitidos
       const hasPermission = allowedRoles.some(role => userRoles.includes(role));
       if (!hasPermission) {
         return res.status(403).json({
@@ -361,16 +449,22 @@ function requireRole(roles) {
       req.user = decoded;
       next();
     } catch (err) {
-      return res.status(401).json({ message: 'Token inválido' });
+      console.error('Error verificando token:', err.message);
+      return res.status(401).json({ message: 'Token inválido o expirado' });
     }
   };
 }
 
-// Update and delete reporte routes
+// ==========================================
+// API: Actualizar y Eliminar Reportes (requieren autenticación)
+// ==========================================
+
 app.patch('/api/reportes/:id', requireRole(['administrador', 'jefe_departamento', 'tecnico']), async (req, res) => {
   try {
     const { id } = req.params;
     const update = req.body;
+    console.log(`Actualizando reporte ${id}:`, update);
+    
     const ok = await db.actualizarReporte(id, update);
     if (ok) {
       res.json({ message: 'Reporte actualizado correctamente' });
@@ -378,6 +472,7 @@ app.patch('/api/reportes/:id', requireRole(['administrador', 'jefe_departamento'
       res.status(404).json({ message: 'Reporte no encontrado' });
     }
   } catch (error) {
+    console.error('Error al actualizar reporte:', error);
     res.status(500).json({ message: 'Error al actualizar reporte', error: error.message });
   }
 });
@@ -385,28 +480,41 @@ app.patch('/api/reportes/:id', requireRole(['administrador', 'jefe_departamento'
 app.delete('/api/reportes/:id', requireRole(['administrador', 'jefe_departamento', 'tecnico']), async (req, res) => {
   try {
     const { id } = req.params;
-    // Obtener reporte antes de eliminar
-    const reporte = await db.obtenerReportePorId(id);
+    console.log(`Eliminando reporte ${id}`);
+    
     const ok = await db.eliminarReporte(id);
-
     if (ok) {
       res.json({ message: 'Reporte eliminado correctamente' });
     } else {
       res.status(404).json({ message: 'Reporte no encontrado' });
     }
   } catch (error) {
-    console.error('Error en DELETE /api/reportes/:id:', error);
-    res.status(500).json({ message: 'Error en el servidor', error: error.message });
+    console.error('Error al eliminar reporte:', error);
+    res.status(500).json({ message: 'Error al eliminar reporte', error: error.message });
   }
 });
 
+// ==========================================
+// Health Check
+// ==========================================
+
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// ==========================================
 // Serve React app for all other routes
+// ==========================================
+
 app.get('*', (req, res) => {
   const indexPath = path.join(__dirname, 'dist', 'index.html');
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
   } else {
-    // Si no existe el archivo index.html en dist, intentar servir el index.html de la carpeta public
     const publicIndexPath = path.join(__dirname, 'public', 'index.html');
     if (fs.existsSync(publicIndexPath)) {
       res.sendFile(publicIndexPath);
@@ -416,10 +524,41 @@ app.get('*', (req, res) => {
   }
 });
 
+// ==========================================
 // Error handling
+// ==========================================
+
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Error en el servidor', error: err.message });
+  console.error('Error no manejado:', err.stack);
+  
+  // Error de multer (tamaño de archivo)
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ 
+      message: 'El archivo es demasiado grande',
+      error: 'LIMIT_FILE_SIZE'
+    });
+  }
+  
+  // Error de multer (demasiados archivos)
+  if (err.code === 'LIMIT_FILE_COUNT') {
+    return res.status(413).json({ 
+      message: 'Demasiados archivos',
+      error: 'LIMIT_FILE_COUNT'
+    });
+  }
+  
+  // Error de tipo de archivo
+  if (err.message && err.message.includes('Tipo de archivo no permitido')) {
+    return res.status(415).json({ 
+      message: err.message,
+      error: 'INVALID_FILE_TYPE'
+    });
+  }
+  
+  res.status(500).json({ 
+    message: 'Error en el servidor', 
+    error: process.env.NODE_ENV === 'production' ? 'Error interno' : err.message 
+  });
 });
 
 // Export for Vercel

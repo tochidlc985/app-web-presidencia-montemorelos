@@ -2,11 +2,7 @@
 
 // URL base para la API - usar URL absoluta para evitar problemas con el proxy
 export const API_BASE_URL = typeof window !== 'undefined'
-  ? (window.location.hostname.includes('vercel.app')
-      ? `${window.location.origin}/api`
-      : (window.location.hostname.includes('localhost')
-          ? `${window.location.origin}/api`
-          : `${window.location.protocol}//${window.location.hostname}/api`))
+  ? `${window.location.origin}/api`
   : '/api';
 
 // URL absoluta para casos especiales - mejorada para móviles
@@ -17,7 +13,7 @@ export const ABSOLUTE_API_BASE_URL = typeof window !== 'undefined'
 // URL ajustada para evitar problemas - con soporte para HTTPS
 export const ADJUSTED_API_BASE_URL = typeof window !== 'undefined' && window.location.hostname.includes('localhost')
   ? 'http://localhost:5000/api'
-  : '/api';
+  : `${window.location.origin}/api`;
 
 // Detectar si estamos en un dispositivo móvil
 export const isMobile = typeof window !== 'undefined' && (

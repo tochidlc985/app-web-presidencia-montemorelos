@@ -100,62 +100,44 @@ const ALLOWED_IMG_TYPES = [
 
 // Función para guardar los datos del usuario en tiempo real
 const saveUserDataInRealTime = async (userData: Usuario): Promise<Usuario> => {
-  // Definir payload fuera del bloque try para que esté accesible en el bloque catch
-  let payload: Usuario = { ...userData };
-
   try {
     if (!userData.email) {
       throw new Error('El email del usuario es requerido para actualizar el perfil');
     }
+
+    // Crear payload limpio
+    const payload: Usuario = { ...userData };
 
     // Eliminar propiedades que no deben enviarse al backend
     delete payload.fotoZoom;
     delete payload.fotoRotation;
     delete payload.fotoPositionX;
     delete payload.fotoPositionY;
+    delete payload.esNuevoPerfil;
+    delete payload._id;
 
-    // Asegurarse de que tenemos los campos necesarios
+    // Asegurarse de que tenemos los campos necesarios mínimos
     if (!payload.nombre) {
       payload.nombre = payload.email?.split('@')[0] || 'Usuario';
+    }
+    if (!payload.departamento) {
+      payload.departamento = 'No especificado';
+    }
+    if (!payload.rol && !payload.roles) {
+      payload.rol = 'usuario';
     }
 
     console.log('Intentando guardar perfil para:', payload.email);
 
     // Llamar al servicio para actualizar el perfil
     const updatedUser = await updateUserProfileService(payload);
-    console.log('Perfil guardado exitosamente');
+    console.log('Perfil guardado exitosamente:', updatedUser);
     return updatedUser;
   } catch (error: any) {
     console.error('Error al guardar datos en tiempo real:', error);
 
-    // Si el error es 404 (perfil no encontrado), intentar crear un nuevo perfil
-    if (error.message && error.message.includes('404')) {
-      console.log('Perfil no encontrado, intentando crear uno nuevo...');
-      try {
-        // Asegurarse de que tenemos los campos necesarios para crear un usuario
-        const basePayload = payload || userData;
-        const newUserPayload = {
-          ...basePayload,
-          nombre: basePayload.nombre || basePayload.email?.split('@')[0] || 'Usuario',
-          email: basePayload.email,
-          rol: basePayload.rol || 'usuario'
-        };
-
-        // Marcar que es un nuevo perfil para evitar bucles
-        newUserPayload.esNuevoPerfil = true;
-
-        const updatedUser = await updateUserProfileService(newUserPayload);
-        console.log('Nuevo perfil creado exitosamente');
-        return updatedUser;
-      } catch (createError: any) {
-        console.error('Error al crear nuevo perfil:', createError);
-        // Si falla la creación, mostrar un mensaje más amigable al usuario
-        throw new Error('No se pudo crear o actualizar el perfil. Por favor, contacte al administrador.');
-      }
-    }
-
     // Si el error es 403 (permisos), mostrar un mensaje específico
-    if (error.response?.status === 403) {
+    if (error.response?.status === 403 || error.message?.includes('403')) {
       console.error('Error de permisos:', error);
       throw new Error('No tienes permisos para actualizar el perfil. Por favor, inicia sesión nuevamente.');
     }

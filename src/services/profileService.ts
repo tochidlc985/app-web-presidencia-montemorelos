@@ -36,7 +36,9 @@ export const getUserProfile = async (): Promise<Usuario> => {
       throw new Error('No se pudo obtener el email del token');
     }
 
-    const response = await fetch(getFullUrl(`${API_ENDPOINTS.PERFIL}/${userEmail}`), {
+    console.log('Obteniendo perfil para:', userEmail);
+
+    const response = await fetch(getFullUrl(`${API_ENDPOINTS.PERFIL}/${encodeURIComponent(userEmail)}`), {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -45,10 +47,15 @@ export const getUserProfile = async (): Promise<Usuario> => {
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Error en respuesta:', response.status, errorText);
       throw new Error(`Error del servidor: ${response.status}`);
     }
 
     const data = await response.json();
+    console.log('Perfil obtenido:', data);
+    
+    // El backend devuelve { usuario: {...} }
     return data.usuario || data || {};
   } catch (error) {
     console.error('Error al obtener perfil de usuario:', error);
@@ -74,12 +81,18 @@ export const updateUserProfile = async (userData: Usuario): Promise<Usuario> => 
     delete payload.fotoRotation;
     delete payload.fotoPositionX;
     delete payload.fotoPositionY;
-
-    // Si es un nuevo perfil, asegurarse de que se envíe el rol
-    const esNuevoPerfil = payload.esNuevoPerfil || false;
     delete payload.esNuevoPerfil;
+    delete payload._id;
 
-    const url = getFullUrl(`${API_ENDPOINTS.PERFIL}/${userData.email}`);
+    // Asegurar que tenemos los campos mínimos requeridos
+    if (!payload.nombre) {
+      payload.nombre = payload.email?.split('@')[0] || 'Usuario';
+    }
+    if (!payload.departamento) {
+      payload.departamento = 'No especificado';
+    }
+
+    const url = getFullUrl(`${API_ENDPOINTS.PERFIL}/${encodeURIComponent(userData.email)}`);
     console.log('Intentando actualizar perfil en:', url);
     console.log('Datos a enviar:', JSON.stringify(payload, null, 2));
 
@@ -91,41 +104,6 @@ export const updateUserProfile = async (userData: Usuario): Promise<Usuario> => 
       },
       body: JSON.stringify(payload)
     });
-
-    // Si recibimos un 404, intentar crear un nuevo perfil
-    if (response.status === 404 && !esNuevoPerfil) {
-      console.log('Perfil no encontrado, intentando crear uno nuevo...');
-
-      // Asegurarse de que tenemos los campos necesarios para crear un usuario
-      const newPayload = {
-        ...payload,
-        nombre: payload.nombre || payload.email?.split('@')[0] || 'Usuario',
-        email: payload.email,
-        rol: payload.rol || 'usuario'
-      };
-
-      // Marcar que es un nuevo perfil para evitar bucles
-      newPayload.esNuevoPerfil = true;
-
-      const createResponse = await fetch(url, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(newPayload)
-      });
-
-      if (!createResponse.ok) {
-        const errorText = await createResponse.text();
-        console.error('Error al crear nuevo perfil:', createResponse.status, errorText);
-        throw new Error(`Error al crear perfil: ${createResponse.status}. ${errorText}`);
-      }
-
-      const createData = await createResponse.json();
-      console.log('Nuevo perfil creado correctamente:', createData);
-      return createData.usuario || newPayload;
-    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -150,7 +128,7 @@ export const updateUserProfile = async (userData: Usuario): Promise<Usuario> => 
 
     const data = await response.json();
     console.log('Perfil actualizado correctamente:', data);
-    return data.usuario || userData;
+    return data.usuario || data || userData;
   } catch (error) {
     console.error('Error al actualizar perfil de usuario:', error);
     throw error;
@@ -173,10 +151,12 @@ export const uploadProfilePhoto = async (file: File): Promise<string> => {
       throw new Error('No se pudo obtener el email del token');
     }
 
+    console.log('Subiendo foto para:', userEmail);
+
     const formData = new FormData();
     formData.append('foto', file);
 
-    const response = await fetch(getFullUrl(`${API_ENDPOINTS.PERFIL}/${userEmail}/foto`), {
+    const response = await fetch(getFullUrl(`${API_ENDPOINTS.PERFIL}/${encodeURIComponent(userEmail)}/foto`), {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`
@@ -186,11 +166,14 @@ export const uploadProfilePhoto = async (file: File): Promise<string> => {
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Error al subir foto:', response.status, errorText);
       throw new Error(`Error del servidor: ${response.status}`);
     }
 
     const data = await response.json();
-    return data.fotoUrl || '';
+    console.log('Foto subida correctamente:', data);
+    return data.fotoUrl || data.foto || '';
   } catch (error) {
     console.error('Error al subir foto de perfil:', error);
     throw error;
@@ -213,7 +196,9 @@ export const deleteProfilePhoto = async (): Promise<void> => {
       throw new Error('No se pudo obtener el email del token');
     }
 
-    const response = await fetch(getFullUrl(`${API_ENDPOINTS.PERFIL}/${userEmail}/foto`), {
+    console.log('Eliminando foto para:', userEmail);
+
+    const response = await fetch(getFullUrl(`${API_ENDPOINTS.PERFIL}/${encodeURIComponent(userEmail)}/foto`), {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`
@@ -221,8 +206,12 @@ export const deleteProfilePhoto = async (): Promise<void> => {
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Error al eliminar foto:', response.status, errorText);
       throw new Error(`Error del servidor: ${response.status}`);
     }
+    
+    console.log('Foto eliminada correctamente');
   } catch (error) {
     console.error('Error al eliminar foto de perfil:', error);
     throw error;

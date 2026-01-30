@@ -415,6 +415,7 @@ const ReportForm = () => {
     }
 
     setIsSubmitting(true);
+    const loadingToast = toast.loading('Enviando reporte...', { position: 'top-center' });
 
     try {
       let departmentsFinal = [...formData.departamento];
@@ -442,6 +443,7 @@ const ReportForm = () => {
         tipoProblema: formData.tipoProblema,
         timestamp: new Date().toISOString(),
         status: 'Pendiente',
+        estado: 'Pendiente',
         aclaracionRespuestas: finalAclaracionRespuestas,
       };
 
@@ -452,46 +454,63 @@ const ReportForm = () => {
       requestFormData.append('data', JSON.stringify(reportDataToSend));
 
       // Agregar los archivos
-      uploadedFiles.forEach(file => {
+      uploadedFiles.forEach((file, index) => {
         requestFormData.append('imagenes', file);
+        console.log(`Archivo ${index + 1}:`, file.name, file.type, file.size);
       });
 
-      try {
-        // Enviar los datos al servidor
-        const response = await api.post(API_ENDPOINTS.REPORTES, requestFormData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
+      console.log('Enviando reporte...');
+
+      // Enviar los datos al servidor
+      const response = await api.post(API_ENDPOINTS.REPORTES, requestFormData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        },
+        timeout: 120000 // 2 minutos de timeout para archivos grandes
+      });
+
+      console.log('Respuesta del servidor:', response);
+
+      if (response.status === 201 || response.status === 200) {
+        toast.dismiss(loadingToast);
+        toast.success('🎉 ¡Reporte enviado exitosamente! Nos pondremos en contacto contigo pronto.', { duration: 5000 });
+        
+        // Resetear el formulario
+        setFormData({
+          email: '',
+          telefono: '',
+          departamento: [],
+          otroDepartamentoEspecifico: '',
+          quienReporta: '',
+          descripcion: '',
+          prioridad: '',
+          tipoProblema: ''
         });
-
-        if (response.status === 201) {
-          toast.success('🎉 ¡Reporte enviado! Nos pondremos en contacto contigo pronto.', { duration: 5000 });
-        } else {
-          throw new Error('Error al enviar el reporte');
-        }
-      } catch (error: any) {
-        console.error('Error al enviar el reporte:', error);
-        const errorMessage = error.response?.data?.message || error.message || 'Error al enviar el reporte';
-        throw new Error(errorMessage);
+        setUploadedFiles([]);
+        setAclaracionRespuestas({});
+        setErrors({});
+        setProgress(0);
+      } else {
+        throw new Error(`Error del servidor: ${response.status}`);
       }
-
-      setFormData({
-        email: '',
-        telefono: '',
-        departamento: [],
-        otroDepartamentoEspecifico: '',
-        quienReporta: '',
-        descripcion: '',
-        prioridad: '',
-        tipoProblema: ''
-      });
-      setUploadedFiles([]);
-      setAclaracionRespuestas({});
-      setErrors({});
-
     } catch (error: any) {
       console.error("ERROR AL ENVIAR REPORTE:", error);
-      toast.error(`🚫 Error al enviar el reporte: ${error.message || 'Por favor, intenta de nuevo.'}`, { duration: 6000 });
+      toast.dismiss(loadingToast);
+      
+      let errorMessage = 'Error al enviar el reporte. Por favor, intenta de nuevo.';
+      
+      if (error.response) {
+        // El servidor respondió con un código de error
+        console.error('Error response:', error.response.data);
+        errorMessage = error.response.data?.message || `Error del servidor (${error.response.status})`;
+      } else if (error.request) {
+        // La solicitud se hizo pero no se recibió respuesta
+        errorMessage = 'No se pudo conectar con el servidor. Verifica tu conexión a internet.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(`🚫 ${errorMessage}`, { duration: 6000 });
     } finally {
       setIsSubmitting(false);
     }
