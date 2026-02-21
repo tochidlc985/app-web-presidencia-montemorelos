@@ -73,8 +73,13 @@ const sendToRoles = (roles, message) => {
   });
 };
 
+// Exportar funciones para usar en otros endpoints
+export { broadcastToAll, sendToUser, sendToRole, sendToRoles };
+
 // ==========================================
 // Configure CORS for production - Mejorado para móviles y Vercel
+// ==========================================
+
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, curl, etc.)
@@ -114,7 +119,7 @@ const storage = multer.memoryStorage();
 
 const upload = multer({
   storage: storage,
-  limits: { 
+  limits: {
     fileSize: 15 * 1024 * 1024, // 15MB limit para reportes
     files: 10 // máximo 10 archivos
   },
@@ -134,7 +139,7 @@ const upload = multer({
 // Multer específico para fotos de perfil (5MB máximo)
 const uploadProfile = multer({
   storage: storage,
-  limits: { 
+  limits: {
     fileSize: 5 * 1024 * 1024 // 5MB limit para fotos de perfil
   },
   fileFilter: (req, file, cb) => {
@@ -183,10 +188,10 @@ app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
     console.log('Recibiendo reporte...');
     console.log('Headers:', req.headers);
     console.log('Files recibidos:', req.files ? req.files.length : 0);
-    
+
     const files = req.files || [];
     let reporte;
-    
+
     try {
       reporte = req.body.data ? JSON.parse(req.body.data) : req.body;
     } catch (parseError) {
@@ -198,7 +203,7 @@ app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
 
     // Validation
     if (!reporte.departamento || !reporte.descripcion || !reporte.tipoProblema || !reporte.quienReporta) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'Faltan campos requeridos en el reporte',
         fields: {
           departamento: !reporte.departamento,
@@ -235,17 +240,35 @@ app.post('/api/reportes', upload.array('imagenes', 10), async (req, res) => {
     const ok = await db.guardarReporte(reporte);
     if (ok) {
       console.log('Reporte guardado exitosamente:', ok.insertedId);
-      res.status(201).json({ 
-        message: 'Reporte guardado correctamente', 
-        insertedId: ok.insertedId 
+      
+      // Notificar en tiempo real a todos los roles que pueden ver reportes
+      const reporteConId = { ...reporte, _id: ok.insertedId };
+      sendToRoles(['administrador', 'jefe_departamento', 'tecnico'], {
+        type: 'reporte_created',
+        data: reporteConId,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Notificar al usuario que creó el reporte
+      if (reporte.email) {
+        sendToUser(reporte.email, {
+          type: 'reporte_created',
+          data: reporteConId,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      res.status(201).json({
+        message: 'Reporte guardado correctamente',
+        insertedId: ok.insertedId
       });
     } else {
       res.status(500).json({ message: 'Error al guardar el reporte en la base de datos' });
     }
   } catch (error) {
     console.error('Error en POST /api/reportes:', error);
-    res.status(500).json({ 
-      message: 'Error en el servidor', 
+    res.status(500).json({
+      message: 'Error en el servidor',
       error: error.message,
       stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
     });
@@ -300,8 +323,8 @@ app.post('/api/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { 
-        email: usuario.email, 
+      {
+        email: usuario.email,
         rol: usuario.rol,
         roles: usuario.roles || [usuario.rol] // Incluir ambos formatos para compatibilidad
       },
@@ -324,13 +347,13 @@ app.get('/api/perfil/:email', async (req, res) => {
   try {
     const { email } = req.params;
     console.log(`Obteniendo perfil para: ${email}`);
-    
+
     const perfil = await db.buscarPerfilPorEmail(email);
     if (!perfil) {
       console.log(`Perfil no encontrado para: ${email}`);
       return res.status(404).json({ message: 'Perfil no encontrado' });
     }
-    
+
     console.log(`Perfil encontrado para: ${email}`);
     res.json({ usuario: perfil }); // Devolver en formato consistente con el frontend
   } catch (error) {
@@ -360,9 +383,17 @@ app.post('/api/perfil/:email/foto', uploadProfile.single('foto'), async (req, re
 
     if (ok) {
       console.log(`Foto de perfil actualizada para: ${email}`);
-      res.json({ 
+      
+      // Notificar en tiempo real al usuario
+      sendToUser(email, {
+        type: 'user_updated',
+        data: { email, foto: fotoUrl },
+        timestamp: new Date().toISOString()
+      });
+      
+      res.json({
         message: 'Foto de perfil subida correctamente',
-        fotoUrl: fotoUrl 
+        fotoUrl: fotoUrl
       });
     } else {
       res.status(404).json({ message: 'Perfil no encontrado' });
@@ -378,12 +409,20 @@ app.delete('/api/perfil/:email/foto', async (req, res) => {
   try {
     const { email } = req.params;
     console.log(`Eliminando foto de perfil para: ${email}`);
-    
+
     // Actualizar el perfil eliminando la foto
     const ok = await db.actualizarPerfilUsuario(email, { foto: null });
-    
+
     if (ok) {
       console.log(`Foto de perfil eliminada para: ${email}`);
+      
+      // Notificar en tiempo real al usuario
+      sendToUser(email, {
+        type: 'user_updated',
+        data: { email, foto: null },
+        timestamp: new Date().toISOString()
+      });
+      
       res.json({ message: 'Foto eliminada correctamente' });
     } else {
       res.status(404).json({ message: 'Perfil no encontrado' });
@@ -403,8 +442,8 @@ app.put('/api/perfil/:email', async (req, res) => {
 
     // Validar que el email en el cuerpo coincida con el de la URL
     if (req.body.email && req.body.email !== email) {
-      return res.status(400).json({ 
-        message: 'El email en el cuerpo no coincide con el email en la URL' 
+      return res.status(400).json({
+        message: 'El email en el cuerpo no coincide con el email en la URL'
       });
     }
 
@@ -413,7 +452,7 @@ app.put('/api/perfil/:email', async (req, res) => {
     delete updateData._id; // No permitir cambiar el ID
     delete updateData.email; // El email ya está en la URL
     delete updateData.password; // La contraseña se maneja por separado
-    
+
     // Asegurar que el email esté presente en los datos
     updateData.email = email;
 
@@ -426,6 +465,14 @@ app.put('/api/perfil/:email', async (req, res) => {
       // Obtener el perfil actualizado para devolverlo
       try {
         const perfilActualizado = await db.buscarPerfilPorEmail(email);
+        
+        // Notificar en tiempo real al usuario
+        sendToUser(email, {
+          type: 'user_updated',
+          data: perfilActualizado,
+          timestamp: new Date().toISOString()
+        });
+        
         res.json({
           message: 'Perfil actualizado correctamente',
           usuario: perfilActualizado
@@ -443,9 +490,9 @@ app.put('/api/perfil/:email', async (req, res) => {
     }
   } catch (error) {
     console.error(`Error al actualizar perfil:`, error);
-    res.status(500).json({ 
-      message: 'Error al actualizar perfil', 
-      error: error.message 
+    res.status(500).json({
+      message: 'Error al actualizar perfil',
+      error: error.message
     });
   }
 });
@@ -474,10 +521,10 @@ function requireRole(roles) {
   return (req, res, next) => {
     const auth = req.headers.authorization;
     if (!auth) return res.status(401).json({ message: 'No autorizado - Token no proporcionado' });
-    
+
     const token = auth.split(' ')[1];
     if (!token) return res.status(401).json({ message: 'No autorizado - Formato de token inválido' });
-    
+
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const userRoles = Array.isArray(decoded.roles) ? decoded.roles : [decoded.roles || decoded.rol];
@@ -509,9 +556,16 @@ app.patch('/api/reportes/:id', requireRole(['administrador', 'jefe_departamento'
     const { id } = req.params;
     const update = req.body;
     console.log(`Actualizando reporte ${id}:`, update);
-    
+
     const ok = await db.actualizarReporte(id, update);
     if (ok) {
+      // Notificar en tiempo real a todos los roles que pueden ver reportes
+      sendToRoles(['administrador', 'jefe_departamento', 'tecnico'], {
+        type: 'reporte_updated',
+        data: { id, ...update },
+        timestamp: new Date().toISOString()
+      });
+      
       res.json({ message: 'Reporte actualizado correctamente' });
     } else {
       res.status(404).json({ message: 'Reporte no encontrado' });
@@ -526,9 +580,16 @@ app.delete('/api/reportes/:id', requireRole(['administrador', 'jefe_departamento
   try {
     const { id } = req.params;
     console.log(`Eliminando reporte ${id}`);
-    
+
     const ok = await db.eliminarReporte(id);
     if (ok) {
+      // Notificar en tiempo real a todos los roles que pueden ver reportes
+      sendToRoles(['administrador', 'jefe_departamento', 'tecnico'], {
+        type: 'reporte_deleted',
+        data: { id },
+        timestamp: new Date().toISOString()
+      });
+      
       res.json({ message: 'Reporte eliminado correctamente' });
     } else {
       res.status(404).json({ message: 'Reporte no encontrado' });
@@ -537,6 +598,18 @@ app.delete('/api/reportes/:id', requireRole(['administrador', 'jefe_departamento
     console.error('Error al eliminar reporte:', error);
     res.status(500).json({ message: 'Error al eliminar reporte', error: error.message });
   }
+});
+
+// ==========================================
+// Health Check
+// ==========================================
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
 });
 
 // ==========================================
@@ -632,18 +705,6 @@ wss.on('connection', (ws, req) => {
 });
 
 // ==========================================
-// Health Check
-// ==========================================
-
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
-
-// ==========================================
 // Serve React app for all other routes
 // ==========================================
 
@@ -667,36 +728,43 @@ app.get('*', (req, res) => {
 
 app.use((err, req, res, next) => {
   console.error('Error no manejado:', err.stack);
-  
+
   // Error de multer (tamaño de archivo)
   if (err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(413).json({ 
+    return res.status(413).json({
       message: 'El archivo es demasiado grande',
       error: 'LIMIT_FILE_SIZE'
     });
   }
-  
+
   // Error de multer (demasiados archivos)
   if (err.code === 'LIMIT_FILE_COUNT') {
-    return res.status(413).json({ 
+    return res.status(413).json({
       message: 'Demasiados archivos',
       error: 'LIMIT_FILE_COUNT'
     });
   }
-  
+
   // Error de tipo de archivo
   if (err.message && err.message.includes('Tipo de archivo no permitido')) {
-    return res.status(415).json({ 
+    return res.status(415).json({
       message: err.message,
       error: 'INVALID_FILE_TYPE'
     });
   }
-  
-  res.status(500).json({ 
-    message: 'Error en el servidor', 
-    error: process.env.NODE_ENV === 'production' ? 'Error interno' : err.message 
+
+  res.status(500).json({
+    message: 'Error en el servidor',
+    error: process.env.NODE_ENV === 'production' ? 'Error interno' : err.message
   });
 });
 
 // Export for Vercel
 export default app;
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
+  },
+};

@@ -38,9 +38,12 @@ class RealtimeServiceImpl implements RealtimeService {
 
     return new Promise((resolve, reject) => {
       try {
-        // Construir la URL del WebSocket
-        const wsUrl = `${process.env.REACT_APP_WS_URL || 'ws://localhost:4000'}/ws?token=${token}`;
+        // Construir la URL del WebSocket - usar HTTPS en producción
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        const wsUrl = `${protocol}//${host}/ws?token=${token}`;
 
+        console.log('Conectando a WebSocket:', wsUrl);
         this.socket = new WebSocket(wsUrl);
 
         this.socket.onopen = () => {

@@ -115,7 +115,14 @@ const saveUserDataInRealTime = async (userData: Usuario): Promise<Usuario> => {
     delete payload.fotoPositionY;
     delete payload.esNuevoPerfil;
     delete payload._id;
-
+    
+    // Mantener roles y rol para asegurar que se preserven
+    if (!payload.rol && payload.roles) {
+      // Si no hay rol pero hay roles, usar el primer rol
+      const rolesArray = Array.isArray(payload.roles) ? payload.roles : [payload.roles];
+      payload.rol = rolesArray[0] || 'usuario';
+    }
+    
     // Asegurarse de que tenemos los campos necesarios mínimos
     if (!payload.nombre) {
       payload.nombre = payload.email?.split('@')[0] || 'Usuario';
@@ -125,13 +132,30 @@ const saveUserDataInRealTime = async (userData: Usuario): Promise<Usuario> => {
     }
     if (!payload.rol && !payload.roles) {
       payload.rol = 'usuario';
+      payload.roles = ['usuario'];
     }
 
     console.log('Intentando guardar perfil para:', payload.email);
+    console.log('Datos a enviar:', JSON.stringify(payload, null, 2));
 
     // Llamar al servicio para actualizar el perfil
     const updatedUser = await updateUserProfileService(payload);
     console.log('Perfil guardado exitosamente:', updatedUser);
+    
+    // Notificar a través de WebSocket que el perfil se actualizó
+    if (typeof window !== 'undefined' && (window as any).realtimeService) {
+      try {
+        (window as any).realtimeService.emit('user_updated', {
+          email: payload.email,
+          data: updatedUser,
+          timestamp: new Date().toISOString()
+        });
+      } catch (wsError) {
+        console.error('Error al enviar notificación WebSocket:', wsError);
+        // No fallar si WebSocket no está disponible
+      }
+    }
+    
     return updatedUser;
   } catch (error: any) {
     console.error('Error al guardar datos en tiempo real:', error);
@@ -140,6 +164,24 @@ const saveUserDataInRealTime = async (userData: Usuario): Promise<Usuario> => {
     if (error.response?.status === 403 || error.message?.includes('403')) {
       console.error('Error de permisos:', error);
       throw new Error('No tienes permisos para actualizar el perfil. Por favor, inicia sesión nuevamente.');
+    }
+    
+    // Si el error es 404 (perfil no encontrado), intentar crearlo
+    if (error.response?.status === 404 || error.message?.includes('404')) {
+      console.error('Perfil no encontrado, intentando crearlo...');
+      // Intentar crear el perfil con los datos actuales
+      try {
+        const newUser = await updateUserProfileService({
+          ...userData,
+          rol: userData.rol || 'usuario',
+          roles: userData.roles || ['usuario']
+        });
+        console.log('Perfil creado exitosamente:', newUser);
+        return newUser;
+      } catch (createError) {
+        console.error('Error al crear perfil:', createError);
+        throw new Error('No se pudo crear ni actualizar el perfil. Por favor, contacte al administrador.');
+      }
     }
 
     throw error;
