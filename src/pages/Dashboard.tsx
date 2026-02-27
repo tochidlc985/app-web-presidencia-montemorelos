@@ -1379,9 +1379,9 @@ const Dashboard: React.FC = () => {
                 </div>
             ) : (
             <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={reportesPorDepartamento} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
+              <BarChart data={reportesPorDepartamento} margin={{ top: 20, right: 30, left: 20, bottom: 120 }}>
                 <CartesianGrid stroke="#e0e7ff" strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#4B5563' }} angle={-45} textAnchor="end" interval={0} height={100} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#4B5563' }} angle={-45} textAnchor="end" interval="preserveStartEnd" height={100} />
                 <YAxis tick={{ fontSize: 12, fill: '#4B5563' }} allowDecimals={false} />
                 <Tooltip
                   cursor={{ fill: 'rgba(99,102,241,0.1)' }}
@@ -1524,9 +1524,9 @@ const Dashboard: React.FC = () => {
             ) : (
             <div className="bg-white/70 rounded-2xl p-4 shadow-inner">
               <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={reportesPorTipo} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                <BarChart data={reportesPorTipo} margin={{ top: 20, right: 30, left: 20, bottom: 120 }}>
                   <CartesianGrid stroke="#bbf7d0" strokeDasharray="5 5" strokeOpacity={0.5} />
-                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#065F46' }} angle={-45} textAnchor="end" interval={0} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#065F46' }} angle={-45} textAnchor="end" interval="preserveStartEnd" />
                   <YAxis tick={{ fontSize: 12, fill: '#065F46' }} allowDecimals={false} />
                   <Tooltip
                     cursor={{ fill: 'rgba(16,185,129,0.1)' }}
@@ -1593,9 +1593,9 @@ const Dashboard: React.FC = () => {
             ) : (
             <div className="bg-white/70 rounded-2xl p-4 shadow-inner">
               <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={reportesPorUsuario} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                <BarChart data={reportesPorUsuario} margin={{ top: 20, right: 30, left: 20, bottom: 120 }}>
                   <CartesianGrid stroke="#a78bfa" strokeDasharray="5 5" strokeOpacity={0.5} />
-                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#7c3aed' }} angle={-45} textAnchor="end" interval={0} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#7c3aed' }} angle={-45} textAnchor="end" interval="preserveStartEnd" />
                   <YAxis tick={{ fontSize: 12, fill: '#7c3aed' }} allowDecimals={false} />
                   <Tooltip
                     cursor={{ fill: 'rgba(124,58,237,0.1)' }}
@@ -1755,7 +1755,7 @@ const Dashboard: React.FC = () => {
             ) : (
             <div className="bg-white/70 rounded-2xl p-4 shadow-inner">
               <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={reportesPorDiaSemana} margin={{ top: 20, right: 30, left: 20, bottom: 10 }}>
+                <BarChart data={reportesPorDiaSemana} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                   <CartesianGrid stroke="#c7d2fe" strokeDasharray="5 5" strokeOpacity={0.5} />
                   <XAxis dataKey="dia" tick={{ fontSize: 12, fill: '#4338CA' }} />
                   <YAxis tick={{ fontSize: 12, fill: '#4338CA' }} allowDecimals={false} />
