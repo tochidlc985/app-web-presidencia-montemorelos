@@ -502,21 +502,14 @@ const Dashboard: React.FC = () => {
 
   const tendencia = useMemo(() => {
     const dataMap: Record<number, { mes: string; reportes: number; resueltos: number }> = {};
-    let yearToFilter = new Date().getFullYear();
-    if (filtroFecha === 'añoPasado') yearToFilter = new Date().getFullYear() - 1;
-    else if (filtroFecha.match(/^\d{4}$/)) yearToFilter = parseInt(filtroFecha, 10);
-  
     for (let i = 0; i < 12; i++) dataMap[i] = { mes: MESES[i], reportes: 0, resueltos: 0 };
   
     reportesFiltrados.forEach(r => {
-      const fecha = new Date(r.timestamp);
-      if (fecha.getFullYear() === yearToFilter) {
-        const mes = fecha.getMonth();
-        if (dataMap[mes]) { dataMap[mes].reportes += 1; if (r.status === 'Resuelto') dataMap[mes].resueltos += 1; }
-      }
+      const mes = new Date(r.timestamp).getMonth();
+      if (dataMap[mes]) { dataMap[mes].reportes += 1; if (r.status === 'Resuelto') dataMap[mes].resueltos += 1; }
     });
     return Object.values(dataMap);
-  }, [reportesFiltrados, filtroFecha]);
+  }, [reportesFiltrados]);
 
   const reportesPorDiaSemana = useMemo(() => {
     const diasMap: Record<string, number> = { Lunes: 0, Martes: 0, 'Miércoles': 0, Jueves: 0, Viernes: 0 };
@@ -1661,9 +1654,9 @@ const Dashboard: React.FC = () => {
               </h3>
               <div className="text-sm font-medium bg-teal-100 text-teal-800 px-3 py-1 rounded-full flex items-center gap-1">
                 <Calendar className="h-4 w-4" />
-                Año {filtroFecha === 'añoActual' ? new Date().getFullYear() :
-                  filtroFecha === 'añoPasado' ? (new Date().getFullYear() - 1) :
-                  filtroFecha.match(/^\d{4}$/) ? filtroFecha : new Date().getFullYear()
+                {filtroFecha === 'añoActual' ? `Año ${new Date().getFullYear()}` :
+                  filtroFecha === 'añoPasado' ? `Año ${new Date().getFullYear() - 1}` :
+                  filtroFecha.match(/^\d{4}$/) ? `Año ${filtroFecha}` : 'Todos los meses'
                 }
               </div>
             </div>
